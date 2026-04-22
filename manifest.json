@@ -1,7 +1,7 @@
 {
   "name": "Où est mon tram ?",
   "short_name": "Où est mon tram ?",
-  "start_url": "/ouestmontram/",
+  "start_url": "/ouestmontramtest/",
   "display": "standalone",
   "background_color": "#121212",
   "theme_color": "#121212",
