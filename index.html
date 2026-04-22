@@ -1079,8 +1079,8 @@
             justify-content: center;
             align-items: center;
             gap: 5px;
-            width: 34px;
-            height: 34px;
+            width: 40px;
+            height: 40px;
             background: rgba(255,255,255,0.06);
             border: 1px solid rgba(255,255,255,0.12);
             border-radius: 10px;
@@ -1294,10 +1294,6 @@
         <div id="times-content" style="flex: 1;">
             <div class="empty">Sélectionnez un arrêt</div>
         </div>
-<footer style="font-size: 0.7rem; color: var(--text-muted); text-align: center; padding: 10px;">
-    Données : <a href="https://data.mobilites-m.fr/" target="_blank" style="color: var(--radar-color);">Mobilités M</a> 
-    | <a href="mentions.html" style="color: var(--text-muted);">Mentions légales</a>
-</footer>
     </div>
 
     <script>
@@ -3465,7 +3461,7 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
 
 <script>
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/ouestmontramtest/sw.js")
+  navigator.serviceWorker.register("/ouestmontram/sw.js")
     .then(() => console.log("Service Worker enregistré"));
 }
 </script>
