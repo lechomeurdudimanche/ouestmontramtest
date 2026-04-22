@@ -755,7 +755,7 @@
             display: block;
         }
         @media (max-width: 768px) {
-            #share-app-btn { display: flex; }
+            #share-app-btn { display: none; }
         }
 
         #install-overlay {
@@ -1081,8 +1081,8 @@
             gap: 5px;
             width: 34px;
             height: 34px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
             border-radius: 10px;
             cursor: pointer;
             padding: 0;
@@ -1097,9 +1097,6 @@
             background: var(--text-muted);
             border-radius: 2px;
             transition: background 0.2s;
-        }
-        @media (max-width: 768px) {
-            .menu-hamburger-btn { display: flex; }
         }
 
         #side-menu-overlay {
@@ -1638,7 +1635,7 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                 const btn = document.getElementById('share-app-btn');
                 if (!btn) return;
                 const isHome = !this.currentLine && !this.currentStop && !this.searchMode && !this.viewingFavorites;
-                btn.style.display = isHome ? 'flex' : 'none';
+                btn.style.display = isHome ? 'none' : 'none';
             },
 
             async init() {
