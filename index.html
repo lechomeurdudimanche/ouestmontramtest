@@ -1073,7 +1073,6 @@
             -webkit-user-select: none;
         }
 
-        /* ── Hamburger button ── */
         .menu-hamburger-btn {
             display: none;
             flex-direction: column;
@@ -1103,7 +1102,6 @@
             .menu-hamburger-btn { display: flex; }
         }
 
-        /* ── Side menu overlay (right 25%, darkened) ── */
         #side-menu-overlay {
             display: none;
             position: fixed;
@@ -1118,12 +1116,11 @@
             content: '';
             position: absolute;
             top: 0; right: 0;
-            width: 25%;
+            width: 100%;
             height: 100%;
             background: rgba(0,0,0,0.55);
         }
 
-        /* ── Side menu drawer ── */
         #side-menu {
             position: fixed;
             top: 0;
@@ -1169,39 +1166,21 @@
             line-height: 1;
         }
         #side-menu-close:hover { background: rgba(255,255,255,0.09); }
-        #side-menu-header-title {
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--text-main);
-        }
 
         #side-menu-nav {
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 12px 0;
         }
         .side-menu-item {
-            display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 16px 20px;
+            padding: 8px 20px;
             color: var(--text-main);
             text-decoration: none;
             font-size: 0.97rem;
             font-weight: 500;
-            border-bottom: 1px solid var(--border);
             transition: background 0.15s;
             cursor: pointer;
-        }
-        .side-menu-item:first-child { border-top: 1px solid var(--border); }
-        .side-menu-item:hover { background: var(--bg-hover); }
-        .side-menu-item:active { background: rgba(255,255,255,0.07); }
-        .side-menu-item-icon {
-            font-size: 1.15rem;
-            width: 22px;
-            text-align: center;
-            flex-shrink: 0;
         }
 
         #side-menu-credit {
@@ -1221,26 +1200,22 @@
         </svg>
     </button>
 
-    <!-- Side menu overlay -->
     <div id="side-menu-overlay" onclick="closeSideMenu()"></div>
 
-    <!-- Side menu drawer -->
     <div id="side-menu" role="dialog" aria-modal="true" aria-label="Menu">
         <div id="side-menu-header">
             <button id="side-menu-close" onclick="closeSideMenu()" title="Fermer le menu">✕</button>
-            <span id="side-menu-header-title">Menu</span>
         </div>
+            <img src="https://lechomeurdudimanche.github.io/ouestmontram/logo.png" style="width: 150px; align-self: center; padding: 15px 0px;">
         <nav id="side-menu-nav">
-            <a href="mentions.html" class="side-menu-item">
-                <span class="side-menu-item-icon">📄</span>
-                Mentions légales
-            </a>
-            <a href="https://github.com/lechomeurdudimanche/ouestmontram" target="_blank" rel="noopener" class="side-menu-item">
-                <span class="side-menu-item-icon">💻</span>
-                Voir le code source
-            </a>
+        <div class="side-menu-item">
+            <p onclick="closeSideMenu(); openInstallOverlay()" style="background: grey; padding: 10px 15px; border-radius: 6px;">Partager l'application</p>
+        </div>
+        <div class="side-menu-item">
+            <p onclick="window.open('mentions.html');" style="background: grey; padding: 10px 15px; border-radius: 6px;">Mentions légales</p>
+        </div>
         </nav>
-        <div id="side-menu-credit">Site créé par<br>le chômeur du dimanche</div>
+        <div id="side-menu-credit">Application développée par<br>Le chomeur du dimanche</div>
     </div>
 
     <div id="install-overlay">
