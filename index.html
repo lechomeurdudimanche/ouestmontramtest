@@ -1142,12 +1142,13 @@
 
         #side-menu-header {
             display: flex;
-            flex-direction: column;
             gap: 12px;
             padding: 16px 18px;
             border-bottom: 1px solid var(--border);
             background: var(--bg-panel);
             flex-shrink: 0;
+            position: relative;
+            justify-content: center;
         }
         #side-menu-close {
             width: 34px;
@@ -1164,6 +1165,9 @@
             flex-shrink: 0;
             transition: background 0.2s;
             line-height: 1;
+            position: absolute;
+            top: 15px;
+            left: 15px;
         }
         #side-menu-close:hover { background: rgba(255,255,255,0.09); }
 
@@ -1171,7 +1175,7 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 16px 0px;
+            padding: 8px 0px;
         }
         .side-menu-item {
             align-items: center;
@@ -1206,7 +1210,7 @@
     <div id="side-menu" role="dialog" aria-modal="true" aria-label="Menu">
         <div id="side-menu-header">
             <button id="side-menu-close" onclick="closeSideMenu()" title="Fermer le menu">✕</button>
-            <img src="https://lechomeurdudimanche.github.io/ouestmontram/logo.png" style="width: 150px; align-self: center;">
+            <img src="https://lechomeurdudimanche.github.io/ouestmontram/logo.png" style="width: 150px;">
         </div>
         <nav id="side-menu-nav">
         <div class="side-menu-item">
