@@ -1172,17 +1172,25 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            padding: 8px 0px;
+            padding: 8px 10px;
         }
         .side-menu-item {
             align-items: center;
-            padding: 8px 20px;
+            padding: 8px 5px;
             color: var(--text-main);
             text-decoration: none;
             font-size: 0.97rem;
             font-weight: 500;
             transition: background 0.15s;
             cursor: pointer;
+        }
+
+        .side-menu-category {
+            align-items: center;
+            padding: 8px 10px;
+            color: var(--text-main);
+            background: #2d2d2d;
+            border-radius: 5px;
         }
 
         #side-menu-credit {
@@ -1210,12 +1218,33 @@
             <img src="https://lechomeurdudimanche.github.io/ouestmontram/logo.png" style="width: 150px;">
         </div>
         <nav id="side-menu-nav">
+<div class="side-menu-category">
+        <p>Partager</p>
         <div class="side-menu-item">
             <p onclick="closeSideMenu(); openInstallOverlay()" style="background: grey; padding: 10px 15px; border-radius: 6px;">Partager l'application</p>
+        </div>
+</div><br>
+<div class="side-menu-category">
+        <p>Transports en commun</p>
+        <div class="side-menu-item">
+            <p onclick="window.location.href='.html';" style="background: grey; padding: 10px 15px; border-radius: 6px;">Plans du réseau</p>
+        </div>
+        <div class="side-menu-item">
+            <p onclick="window.location.href='.html';" style="background: grey; padding: 10px 15px; border-radius: 6px;">Consulter les fiches horaires</p>
+        </div>
+</div><br>
+<div class="side-menu-category">
+        <p>Assistance</p>
+        <div class="side-menu-item">
+            <p onclick="window.location.href='faq.html';" style="background: grey; padding: 10px 15px; border-radius: 6px;">Foire aux questions</p>
         </div>
         <div class="side-menu-item">
             <p onclick="window.location.href='mentions.html';" style="background: grey; padding: 10px 15px; border-radius: 6px;">Mentions légales</p>
         </div>
+        <div class="side-menu-item">
+            <p onclick="window.location.href='.html';" style="background: grey; padding: 10px 15px; border-radius: 6px;">Contact</p>
+        </div>
+</div>
         </nav>
         <div id="side-menu-credit">Où est mon tram - Version 1</div>
     </div>
