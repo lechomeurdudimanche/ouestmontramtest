@@ -3536,7 +3536,8 @@ if ("serviceWorker" in navigator) {
     function shareApp() {
         const shareUrl = SITE_URL;
         const shareText =
-`Découvre l'application mobile Où est mon tram : ${shareUrl}
+`Découvre l'application mobile Où est mon tram : 
+${shareUrl}
 
 Comment installer l'application sur ton téléphone :
 
@@ -3557,7 +3558,7 @@ Sur iPhone / iPad
         if (navigator.share) {
             navigator.share({
                 title: 'Où est mon tram ?',
-                text: shareText
+                link: shareText
             }).then(() => {
                 btn.classList.add('shared');
                 btn.querySelector('span:last-child').textContent = 'Partagé !';
