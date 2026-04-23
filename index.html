@@ -3536,10 +3536,10 @@ if ("serviceWorker" in navigator) {
     function shareApp() {
         const shareUrl = SITE_URL;
         const shareText =
-`Découvre l'application mobile Où est mon tram :
-${shareUrl}
+`Découvre l'application mobile Où est mon tram : ${shareUrl}
 
 Comment installer l'application sur ton téléphone :
+
 Sur Android
 1. Ouvre le lien ci-dessus dans Chrome
 2. Appuie sur les ⋮ trois points en haut à droite
@@ -3557,8 +3557,7 @@ Sur iPhone / iPad
         if (navigator.share) {
             navigator.share({
                 title: 'Où est mon tram ?',
-                text: shareText,
-                url: shareUrl
+                text: shareText
             }).then(() => {
                 btn.classList.add('shared');
                 btn.querySelector('span:last-child').textContent = 'Partagé !';
