@@ -3558,7 +3558,7 @@ Sur iPhone / iPad
         if (navigator.share) {
             navigator.share({
                 title: 'Où est mon tram ?',
-                link: shareText
+                text: shareText
             }).then(() => {
                 btn.classList.add('shared');
                 btn.querySelector('span:last-child').textContent = 'Partagé !';
