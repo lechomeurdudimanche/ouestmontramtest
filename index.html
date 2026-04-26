@@ -1554,7 +1554,7 @@
                 main:  ['SEM:GENPRISME','SEM:GENMASDESIL','SEM:GENGRANDPRE','SEM:GENFAU','SEM:GENSEYHDV','SEM:GENVALLCATA','SEM:GENVACA','SEM:GENVALLIBE','SEM:GENFOCHFERI','SEM:GENGUSTRIVE','SEM:GENCHAVANT','SEM:GENGREHOTEL','SEM:GENVALMY','SEM:GENPERIBROS','SEM:GENNEYRBELL','SEM:GENTA','SEM:GENGABFAURE','SEM:GENBIBLIUNI','SEM:GENCONDIUNI'],
                 depot: ['SEM:GENPRISME','SEM:GENMASDESIL','SEM:GENGRANDPRE','SEM:GENFAU','SEM:GENSEYHDV','SEM:GENVALLCATA','SEM:GENVACA','SEM:GENVALLIBE','SEM:GENFOCHFERI','SEM:GENGUSTRIVE','SEM:GENCHAVANT','SEM:GENGREHOTEL','SEM:GENVALMY','SEM:GENPERIBROS','SEM:GENNEYRBELL','SEM:GENTA','SEM:GENGABFAURE','SEM:GENBIBLIUNI','SEM:GENCONDIUNI','SEM:GENMAYENCIN','SEM:GENGIERGARE','SEM:GENPLAINEDS'],
                 mainOnlyStops:  new Set([]),
-                depotOnlyStops: new Set(['SEM:GENMAYENCIN','SEM:GENGIERGARE','SEM:GENPLAINEDS']),
+                depotOnlyStops: new Set(['SEM:GENGABFAURE','SEM:GENBIBLIUNI','SEM:GENMAYENCIN','SEM:GENGIERGARE','SEM:GENPLAINEDS']),
                 depotKeywords: ['plaine','sports']
             },
             'SEM:D': {
@@ -2503,10 +2503,16 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
 
                         const alreadyPassedTripIds = new Set();
                         {
+                            const nowForCheck = Math.floor(Date.now() / 1000);
                             const theoreticalTrips = displayedTimes
-                                .filter(t => t.tripId && t.realtimeState !== 'UPDATED');
+                                .filter(t => {
+                                    if (!t.tripId || t.realtimeState === 'UPDATED') return false;
+                                    const minutesUntil = ((t.serviceDay + t.scheduledDeparture) - nowForCheck) / 60;
+                                    return minutesUntil < 5;
+                                });
 
                             if (theoreticalTrips.length > 0) {
+                                let prevClusters = [];
                                 let nextClusters = [];
 
                                 if (isTram) {
@@ -2523,9 +2529,12 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                                     }
                                     if (currentIdxForCheck >= 0) {
                                         for (let step = 1; step <= 2; step++) {
-                                            const idx = currentIdxForCheck + forwardStep * step;
-                                            if (idx >= 0 && idx < orderedForCheck.length)
-                                                nextClusters.push(orderedForCheck[idx]);
+                                            const prevIdx = currentIdxForCheck - forwardStep * step;
+                                            if (prevIdx >= 0 && prevIdx < orderedForCheck.length)
+                                                prevClusters.push(orderedForCheck[prevIdx]);
+                                            const nextIdx = currentIdxForCheck + forwardStep * step;
+                                            if (nextIdx >= 0 && nextIdx < orderedForCheck.length)
+                                                nextClusters.push(orderedForCheck[nextIdx]);
                                         }
                                     }
                                 } else {
@@ -2549,17 +2558,21 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                                             const currentIdxBus = orderedStops.indexOf(this.currentStop);
                                             if (currentIdxBus >= 0) {
                                                 for (let step = 1; step <= 2; step++) {
-                                                    const idx = currentIdxBus + step;
-                                                    if (idx < orderedStops.length)
-                                                        nextClusters.push(orderedStops[idx]);
+                                                    const prevIdx = currentIdxBus - step;
+                                                    if (prevIdx >= 0)
+                                                        prevClusters.push(orderedStops[prevIdx]);
+                                                    const nextIdx = currentIdxBus + step;
+                                                    if (nextIdx < orderedStops.length)
+                                                        nextClusters.push(orderedStops[nextIdx]);
                                                 }
                                             }
                                         }
                                     }
                                 }
 
-                                if (nextClusters.length > 0) {
-                                    await Promise.all(nextClusters.map(async (cluster) => {
+                                const confirmedNotPassedTripIds = new Set();
+                                if (prevClusters.length > 0) {
+                                    await Promise.all(prevClusters.map(async (cluster) => {
                                         try {
                                             const res = await fetch(`${API_BASE}/clusters/${cluster}/stoptimes`);
                                             if (!res.ok) return;
@@ -2569,8 +2582,29 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                                                 for (const t of pattern.times) {
                                                     if (t.realtimeState !== 'UPDATED') continue;
                                                     if (theoreticalTrips.some(tp => tp.tripId === t.tripId)) {
+                                                        confirmedNotPassedTripIds.add(t.tripId);
+                                                        console.log(`[AVANCE] tripId ${t.tripId} temps réel trouvé en AMONT (${cluster}) → pas encore passé, donnée théorique conservée`);
+                                                    }
+                                                }
+                                            }
+                                        } catch(e) {}
+                                    }));
+                                }
+
+                                const tripsToCheckForward = theoreticalTrips.filter(t => !confirmedNotPassedTripIds.has(t.tripId));
+                                if (tripsToCheckForward.length > 0 && nextClusters.length > 0) {
+                                    await Promise.all(nextClusters.map(async (cluster) => {
+                                        try {
+                                            const res = await fetch(`${API_BASE}/clusters/${cluster}/stoptimes`);
+                                            if (!res.ok) return;
+                                            const checkData = await res.json();
+                                            for (const pattern of checkData) {
+                                                if (!this.matchesLine(pattern.pattern.id, this.currentLine)) continue;
+                                                for (const t of pattern.times) {
+                                                    if (t.realtimeState !== 'UPDATED') continue;
+                                                    if (tripsToCheckForward.some(tp => tp.tripId === t.tripId)) {
                                                         alreadyPassedTripIds.add(t.tripId);
-                                                        console.log(`[AVANCE] tripId ${t.tripId} déjà passé à ${this.currentStop} (temps réel trouvé à ${cluster})`);
+                                                        console.log(`[AVANCE] tripId ${t.tripId} déjà passé à ${this.currentStop} (temps réel trouvé en AVAL à ${cluster})`);
                                                     }
                                                 }
                                             }
@@ -2581,16 +2615,24 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                         }
 
                         let radarFired = false;
+                        const visiblePassages = [];
                         for (let i = 0; i < displayedTimes.length; i++) {
                             const timeData = displayedTimes[i];
                             if (alreadyPassedTripIds.has(timeData.tripId)) {
                                 console.log(`[AVANCE] passage masqué : ${timeData.tripId} à ${this.currentStop}`);
                                 continue;
                             }
+                            visiblePassages.push(timeData);
+                        }
+
+                        for (let i = 0; i < visiblePassages.length; i++) {
+                            const timeData = visiblePassages[i];
                             const uniqueId = `radar-${timeData.tripId}`;
                             html += this.formatPassage(timeData, uniqueId, isTram);
 
-                            if (!radarFired && timeData.realtimeState === 'UPDATED') {
+                            const anyPrevIsTheoretical = visiblePassages.slice(0, i).some(p => p.realtimeState !== 'UPDATED');
+
+                            if (!radarFired && timeData.realtimeState === 'UPDATED' && !anyPrevIsTheoretical) {
                                 radarFired = true;
                                 const _tripId = timeData.tripId;
                                 const _dest = dest;
@@ -2755,9 +2797,17 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                     return;
                 }
 
-                const destLower = (destination || '').toLowerCase().split(/[\s\-]/)[0];
-                const destEntry = (this.lineTopologyFull.length ? this.lineTopologyFull : this.lineTopology)
-                    .find(s => s.name.toLowerCase().includes(destLower));
+                const destWords = (destination || '').toLowerCase().split(/[\s\-]+/).filter(w => w.length > 2);
+                const destEntry = (() => {
+                    const topology = this.lineTopologyFull.length ? this.lineTopologyFull : this.lineTopology;
+                    let best = null, bestScore = 0;
+                    for (const s of topology) {
+                        const sName = s.name.toLowerCase();
+                        const score = destWords.filter(w => sName.includes(w)).length;
+                        if (score > bestScore) { bestScore = score; best = s; }
+                    }
+                    return bestScore > 0 ? best : null;
+                })();
 
                 const destIndices = [];
                 if (destEntry) {
@@ -2812,19 +2862,26 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                         const checkData = await res.json();
 
                         let foundTime = null;
+                        let foundTheoretical = false;
                         for (const pattern of checkData) {
                             if (!this.matchesLine(pattern.pattern.id, this.currentLine)) continue;
                             for (const t of pattern.times) {
                                 if (t.tripId !== tripId) continue;
                                 if (t.realtimeState !== 'UPDATED') {
-                                    console.log(`[RADAR] ${checkCluster} ignoré : pas de temps réel (state=${t.realtimeState})`);
+                                    console.log(`[RADAR] ${checkCluster} données théoriques trouvées pour tripId ${tripId} → localisation impossible`);
+                                    foundTheoretical = true;
                                     break;
                                 }
                                 const nowUnix = Math.floor(Date.now() / 1000);
                                 foundTime = ((t.serviceDay || 0) + t.realtimeDeparture) - nowUnix;
                                 break;
                             }
-                            if (foundTime !== null) break;
+                            if (foundTime !== null || foundTheoretical) break;
+                        }
+
+                        if (foundTheoretical) {
+                            el.innerHTML = `<div class="radar-info"><div class="radar-static"></div> Impossible de localiser le véhicule</div>`;
+                            return;
                         }
 
                         if (foundTime !== null) {
@@ -2964,7 +3021,8 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                             for (const t of pattern.times) {
                                 if (t.tripId !== tripId) continue;
                                 if (t.realtimeState !== 'UPDATED') {
-                                    console.log(`[RADAR BUS] ${checkCluster} ignoré : pas de temps réel (state=${t.realtimeState})`);
+                                    console.log(`[RADAR BUS] ${checkCluster} données théoriques trouvées pour tripId ${tripId} → localisation impossible`);
+                                    foundTime = 'theoretical';
                                     break;
                                 }
                                 const n = new Date();
@@ -2974,6 +3032,11 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                                 break;
                             }
                             if (foundTime !== null) break;
+                        }
+
+                        if (foundTime === 'theoretical') {
+                            el.innerHTML = `<div class="radar-info"><div class="radar-static"></div> Impossible de localiser le véhicule</div>`;
+                            return;
                         }
 
                         if (foundTime !== null) {
