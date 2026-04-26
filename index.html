@@ -186,6 +186,7 @@
         }
         .status-dot.realtime { background: var(--realtime); box-shadow: 0 0 8px var(--realtime); }
         .status-dot.theoretical { background: var(--theoretical); }
+        .status-dot.estimated { background: #f5c518; box-shadow: 0 0 6px #f5c518; }
 
         .radar-info {
             margin-top: 8px;
@@ -2502,14 +2503,10 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                         const displayedTimes = deduplicatedTimes.slice(0, 4);
 
                         const alreadyPassedTripIds = new Set();
+                        const estimatedDelays = new Map();
                         {
-                            const nowForCheck = Math.floor(Date.now() / 1000);
                             const theoreticalTrips = displayedTimes
-                                .filter(t => {
-                                    if (!t.tripId || t.realtimeState === 'UPDATED') return false;
-                                    const minutesUntil = ((t.serviceDay + t.scheduledDeparture) - nowForCheck) / 60;
-                                    return minutesUntil < 5;
-                                });
+                                .filter(t => !!(t.tripId && t.realtimeState !== 'UPDATED'));
 
                             if (theoreticalTrips.length > 0) {
                                 let prevClusters = [];
@@ -2528,7 +2525,7 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                                         if (destIdxCheck >= 0) forwardStep = destIdxCheck > currentIdxForCheck ? 1 : -1;
                                     }
                                     if (currentIdxForCheck >= 0) {
-                                        for (let step = 1; step <= 2; step++) {
+                                        for (let step = 1; step <= 5; step++) {
                                             const prevIdx = currentIdxForCheck - forwardStep * step;
                                             if (prevIdx >= 0 && prevIdx < orderedForCheck.length)
                                                 prevClusters.push(orderedForCheck[prevIdx]);
@@ -2557,7 +2554,7 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                                         if (orderedStops) {
                                             const currentIdxBus = orderedStops.indexOf(this.currentStop);
                                             if (currentIdxBus >= 0) {
-                                                for (let step = 1; step <= 2; step++) {
+                                                for (let step = 1; step <= 5; step++) {
                                                     const prevIdx = currentIdxBus - step;
                                                     if (prevIdx >= 0)
                                                         prevClusters.push(orderedStops[prevIdx]);
@@ -2571,45 +2568,47 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                                 }
 
                                 const confirmedNotPassedTripIds = new Set();
-                                if (prevClusters.length > 0) {
-                                    await Promise.all(prevClusters.map(async (cluster) => {
-                                        try {
-                                            const res = await fetch(`${API_BASE}/clusters/${cluster}/stoptimes`);
-                                            if (!res.ok) return;
-                                            const checkData = await res.json();
-                                            for (const pattern of checkData) {
-                                                if (!this.matchesLine(pattern.pattern.id, this.currentLine)) continue;
-                                                for (const t of pattern.times) {
-                                                    if (t.realtimeState !== 'UPDATED') continue;
-                                                    if (theoreticalTrips.some(tp => tp.tripId === t.tripId)) {
-                                                        confirmedNotPassedTripIds.add(t.tripId);
-                                                        console.log(`[AVANCE] tripId ${t.tripId} temps réel trouvé en AMONT (${cluster}) → pas encore passé, donnée théorique conservée`);
+                                for (const cluster of prevClusters) {
+                                    try {
+                                        const res = await fetch(`${API_BASE}/clusters/${cluster}/stoptimes`);
+                                        if (!res.ok) continue;
+                                        const checkData = await res.json();
+                                        for (const pattern of checkData) {
+                                            if (!this.matchesLine(pattern.pattern.id, this.currentLine)) continue;
+                                            for (const t of pattern.times) {
+                                                if (t.realtimeState !== 'UPDATED') continue;
+                                                if (theoreticalTrips.some(tp => tp.tripId === t.tripId)) {
+                                                    confirmedNotPassedTripIds.add(t.tripId);
+                                                    if (!estimatedDelays.has(t.tripId)) {
+                                                        estimatedDelays.set(t.tripId, t.departureDelay);
+                                                        console.log(`[AVANCE] tripId ${t.tripId} temps réel trouvé en AMONT (${cluster}) → delay=${t.departureDelay}s`);
                                                     }
                                                 }
                                             }
-                                        } catch(e) {}
-                                    }));
+                                        }
+                                    } catch(e) {}
                                 }
 
                                 const tripsToCheckForward = theoreticalTrips.filter(t => !confirmedNotPassedTripIds.has(t.tripId));
-                                if (tripsToCheckForward.length > 0 && nextClusters.length > 0) {
-                                    await Promise.all(nextClusters.map(async (cluster) => {
+                                if (tripsToCheckForward.length > 0) {
+                                    for (const cluster of nextClusters) {
                                         try {
                                             const res = await fetch(`${API_BASE}/clusters/${cluster}/stoptimes`);
-                                            if (!res.ok) return;
+                                            if (!res.ok) continue;
                                             const checkData = await res.json();
                                             for (const pattern of checkData) {
                                                 if (!this.matchesLine(pattern.pattern.id, this.currentLine)) continue;
                                                 for (const t of pattern.times) {
                                                     if (t.realtimeState !== 'UPDATED') continue;
-                                                    if (tripsToCheckForward.some(tp => tp.tripId === t.tripId)) {
-                                                        alreadyPassedTripIds.add(t.tripId);
-                                                        console.log(`[AVANCE] tripId ${t.tripId} déjà passé à ${this.currentStop} (temps réel trouvé en AVAL à ${cluster})`);
+                                                    const match = tripsToCheckForward.find(tp => tp.tripId === t.tripId);
+                                                    if (match && !estimatedDelays.has(t.tripId)) {
+                                                        estimatedDelays.set(t.tripId, t.departureDelay);
+                                                        console.log(`[AVANCE] tripId ${t.tripId} temps réel trouvé en AVAL (${cluster}) → delay=${t.departureDelay}s, estimation appliquée`);
                                                     }
                                                 }
                                             }
                                         } catch(e) {}
-                                    }));
+                                    }
                                 }
                             }
                         }
@@ -2621,6 +2620,20 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                             if (alreadyPassedTripIds.has(timeData.tripId)) {
                                 console.log(`[AVANCE] passage masqué : ${timeData.tripId} à ${this.currentStop}`);
                                 continue;
+                            }
+                            if (timeData.realtimeState !== 'UPDATED' && estimatedDelays.has(timeData.tripId)) {
+                                const delay = estimatedDelays.get(timeData.tripId);
+                                const estimatedDeparture = timeData.scheduledDeparture + delay;
+                                const nowUnix = Math.floor(Date.now() / 1000);
+                                if ((timeData.serviceDay || 0) + estimatedDeparture < nowUnix - 30) {
+                                    alreadyPassedTripIds.add(timeData.tripId);
+                                    console.log(`[AVANCE] passage masqué (estimation négative) : ${timeData.tripId}`);
+                                    continue;
+                                }
+                                timeData.realtimeDeparture = estimatedDeparture;
+                                timeData.realtimeArrival = timeData.scheduledArrival + delay;
+                                timeData.departureDelay = delay;
+                                timeData.realtimeState = 'ESTIMATED';
                             }
                             visiblePassages.push(timeData);
                         }
@@ -2701,7 +2714,9 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                 else timeText = `${diffMin} min`;
 
                 const isRealtime = timeData.realtimeState === 'UPDATED';
-                const dotClass = isRealtime ? 'realtime' : 'theoretical';
+                const isEstimated = timeData.realtimeState === 'ESTIMATED';
+                const dotClass = isRealtime ? 'realtime' : isEstimated ? 'estimated' : 'theoretical';
+                const statusLabel = isRealtime ? 'Temps Réel' : isEstimated ? 'Estimé' : 'Théorique';
                 const safeId = (timeData.tripId || '').replace(/'/g, "\\'");
 
                 const isBusWithRadar = !isTram && !!BUS_RADAR_STOPS[this.currentLine];
@@ -2716,7 +2731,7 @@ function getBranchTopology(lineId, destination, currentStopCode, topologyFull) {
                             <span>${timeText}</span>
                             <div class="time-box">
                                 <div class="status-dot ${dotClass}"></div>
-                                <span style="font-size: 0.8em; color: var(--text-muted);">${isRealtime ? 'Temps Réel' : 'Théorique'}</span>
+                                <span style="font-size: 0.8em; color: var(--text-muted);">${statusLabel}</span>
                                 ${copyBtn}
                             </div>
                         </div>
