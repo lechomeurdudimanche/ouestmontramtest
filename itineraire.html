@@ -599,6 +599,117 @@
         }
         .lp-edit-sug:last-child { border-bottom: none; }
         .lp-edit-sug:active { opacity: 0.7; }
+
+        /* ── Navigation mode ── */
+        #nav-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 500;
+            flex-direction: column;
+            pointer-events: none;
+        }
+        #nav-instr-card {
+            margin: 10px 12px 0;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 18px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 6px 28px rgba(0,0,0,0.7);
+            pointer-events: all;
+        }
+        #nav-instr-arrow {
+            width: 52px; height: 52px;
+            border-radius: 14px;
+            background: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        #nav-instr-arrow svg { width: 28px; height: 28px; }
+        #nav-instr-body { flex: 1; min-width: 0; }
+        #nav-instr-street {
+            font-size: 1.05rem; font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #nav-instr-dist {
+            font-size: 0.82rem; color: var(--accent);
+            font-weight: 600; margin-top: 3px;
+        }
+        #nav-speed-badge {
+            background: #111; border: 1.5px solid #333;
+            border-radius: 10px; padding: 4px 9px;
+            font-size: 0.72rem; font-weight: 700;
+            color: var(--text-muted); flex-shrink: 0;
+            text-align: center; line-height: 1.3;
+        }
+        #nav-speed-val { font-size: 1.05rem; color: var(--text-main); display: block; }
+
+        #nav-arrive-bar {
+            margin: 6px 12px 0;
+            background: rgba(18,18,18,0.92);
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 8px 14px;
+            display: flex; align-items: center; gap: 10px;
+            pointer-events: all;
+            backdrop-filter: blur(4px);
+        }
+        #nav-arrive-bar span { font-size: 0.78rem; color: var(--text-muted); }
+        #nav-arrive-time { font-size: 0.88rem; font-weight: 700; color: var(--text-main) !important; }
+        #nav-remain-dist { margin-left: auto; font-weight: 600; color: var(--text-main) !important; }
+
+        #nav-stop-btn {
+            display: none;
+            position: fixed;
+            bottom: calc(var(--nav-h) + 14px);
+            left: 50%; transform: translateX(-50%);
+            z-index: 501;
+            background: #e53935;
+            color: #fff;
+            border: none; border-radius: 26px;
+            padding: 13px 28px;
+            font-size: 0.9rem; font-weight: 700;
+            font-family: inherit; cursor: pointer;
+            box-shadow: 0 4px 20px rgba(229,57,53,0.45);
+            white-space: nowrap;
+            align-items: center; gap: 8px;
+        }
+        #nav-stop-btn:active { opacity: 0.85; }
+
+        #nav-recalc-badge {
+            display: none;
+            position: fixed;
+            top: 130px; left: 50%; transform: translateX(-50%);
+            z-index: 502;
+            background: #ff9800;
+            color: #000;
+            border-radius: 20px;
+            padding: 6px 16px;
+            font-size: 0.8rem; font-weight: 700;
+            font-family: inherit;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+            animation: fadeSlide 0.3s ease;
+        }
+
+        #dv-start-nav-btn {
+            display: none;
+            align-items: center; gap: 6px;
+            padding: 8px 16px;
+            border-radius: 20px; border: none;
+            background: var(--accent); color: #000;
+            font-size: 0.83rem; font-weight: 700;
+            font-family: inherit; cursor: pointer;
+            flex-shrink: 0;
+            transition: opacity 0.15s;
+        }
+        #dv-start-nav-btn:active { opacity: 0.8; }
+
+        body.nav-active #search-float { display: none !important; }
+        body.nav-active #bottom-sheet { height: 0 !important; overflow: hidden !important; }
         .lp-edit-sug-dot {
             width: 8px; height: 8px; border-radius: 50%;
             background: var(--text-muted); flex-shrink: 0;
@@ -818,12 +929,45 @@
                     <div class="dvs-time" id="dvs-time"></div>
                     <div class="dvs-route" id="dvs-route"></div>
                 </div>
+                <button id="dv-start-nav-btn" onclick="ITIN.startNavigation()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                    Commencer
+                </button>
             </div>
             <div id="dv-steps"></div>
         </div>
     </div>
 
     <div id="opt-backdrop" onclick="ITIN.closePopup()"></div>
+
+    <!-- Navigation overlay -->
+    <div id="nav-overlay">
+        <div id="nav-instr-card">
+            <div id="nav-instr-arrow">
+                <svg id="nav-arrow-svg" viewBox="0 0 28 28" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="14" y1="22" x2="14" y2="6"/><polyline points="8,12 14,6 20,12"/>
+                </svg>
+            </div>
+            <div id="nav-instr-body">
+                <div id="nav-instr-street">Calcul en cours…</div>
+                <div id="nav-instr-dist"></div>
+            </div>
+            <div id="nav-speed-badge">
+                <span id="nav-speed-val">—</span>
+                km/h
+            </div>
+        </div>
+        <div id="nav-arrive-bar">
+            <span>Arrivée</span>
+            <span id="nav-arrive-time">—</span>
+            <span id="nav-remain-dist">—</span>
+        </div>
+    </div>
+    <div id="nav-recalc-badge">🔄 Recalcul…</div>
+    <button id="nav-stop-btn" onclick="ITIN.stopNavigation()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        Terminer la navigation
+    </button>
     <div id="opt-popup">
         <div class="popup-header">
             <span class="popup-title" id="popup-title">Options</span>
@@ -2566,10 +2710,15 @@
         showDetail(idx) {
             const itin = this.sortedItins[idx];
             if(!itin) return;
+            this._activeDetailIdx = idx;
 
             document.getElementById('dvs-time').textContent  = `${fmtTime(itin.startTime)} – ${fmtTime(itin.endTime)} · ${fmtDur(itin.duration)}`;
             document.getElementById('dvs-route').textContent = `${this.from.name} – ${this.to.name}`;
             document.getElementById('dv-steps').innerHTML = this.buildSteps(itin);
+
+            // Show "Commencer" button only for walk/bicycle modes
+            const navBtn = document.getElementById('dv-start-nav-btn');
+            navBtn.style.display = (this.travelMode === 'walk' || this.travelMode === 'bicycle') ? 'flex' : 'none';
 
             document.getElementById('sheet-results').classList.add('hidden');
             document.getElementById('sheet-detail').classList.add('active');
@@ -2583,6 +2732,7 @@
         },
 
         closeDetail() {
+            if(this._navMode) this.stopNavigation();
             document.body.classList.remove('detail-open');
             this.showResultsPanel();
             if(this.sortedItins.length>0) this.drawRoute(this.sortedItins[0]);
@@ -2722,6 +2872,230 @@
 
             return html;
         },
+
+        // ── NAVIGATION MODE ──────────────────────────────────────────────────
+        _navMode: false,
+        _navCurrentItin: null,
+        _navAllSteps: [],
+        _navWatchId: null,
+        _orientationHandler: null,
+        _activeDetailIdx: 0,
+        _navOffRouteCount: 0,
+        _navFollowEnabled: true,
+        _navOnMapDrag: null,
+
+        async startNavigation() {
+            if(!this._gpsPos) {
+                navigator.geolocation && navigator.geolocation.getCurrentPosition(
+                    pos => {
+                        this._gpsPos = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+                        if(this._gpsMarker) this._gpsMarker.setLatLng([this._gpsPos.lat, this._gpsPos.lon]);
+                        this.startNavigation();
+                    },
+                    () => alert('Position GPS non disponible. Activez la localisation.'),
+                    { enableHighAccuracy: true, timeout: 8000 }
+                );
+                return;
+            }
+            this._navMode = true;
+            this._navOffRouteCount = 0;
+            this._navFollowEnabled = true;
+
+            document.body.classList.add('nav-active');
+            document.getElementById('nav-overlay').style.display = 'flex';
+            document.getElementById('nav-stop-btn').style.display = 'flex';
+            document.getElementById('dv-start-nav-btn').style.display = 'none';
+
+            this.map.setView([this._gpsPos.lat, this._gpsPos.lon], 17, { animate: true });
+
+            document.getElementById('nav-instr-street').textContent = 'Calcul du trajet…';
+            document.getElementById('nav-instr-dist').textContent = '';
+            document.getElementById('nav-arrive-time').textContent = '—';
+            document.getElementById('nav-remain-dist').textContent = '—';
+            this._navSetArrow('CONTINUE');
+
+            try {
+                const mode = this.travelMode === 'bicycle' ? 'BICYCLE' : 'WALK';
+                const url = `https://data.mobilites-m.fr/api/routers/default/plan?fromPlace=${this._gpsPos.lat},${this._gpsPos.lon}&toPlace=${this.to.lat},${this.to.lon}&numItineraries=1&mode=${mode}&showIntermediateStops=true&bannedAgencies=MCO:MCO`;
+                const res = await fetch(url, { headers: { origin: 'ouestmontram' } });
+                const data = await res.json();
+                const itins = data && data.plan && data.plan.itineraries ? data.plan.itineraries : [];
+                if(itins.length > 0) {
+                    this._navCurrentItin = itins[0];
+                    this._navAllSteps = this._extractNavSteps(itins[0]);
+                    await this.drawRoute(itins[0]);
+                }
+            } catch(e) {
+                const itin = this.sortedItins[this._activeDetailIdx];
+                if(itin) { this._navCurrentItin = itin; this._navAllSteps = this._extractNavSteps(itin); }
+            }
+
+            this._navUpdateUI(this._gpsPos.lat, this._gpsPos.lon, null);
+
+            if(this._navWatchId) navigator.geolocation.clearWatch(this._navWatchId);
+            this._navWatchId = navigator.geolocation.watchPosition(
+                pos => this._navOnPosition(pos),
+                () => {},
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+            );
+            this._startOrientation();
+            this.map.on('dragstart', this._navOnMapDrag = () => { this._navFollowEnabled = false; });
+        },
+
+        _navOnPosition(pos) {
+            if(!this._navMode) return;
+            const lat = pos.coords.latitude, lon = pos.coords.longitude;
+            const speed = pos.coords.speed;
+            this._gpsPos = { lat, lon };
+            if(this._gpsMarker) this._gpsMarker.setLatLng([lat, lon]);
+            else {
+                const icon = L.divIcon({ className:'', html:`<div class="gps-dot-wrap"><div class="gps-pulse"></div><div class="gps-dot"></div></div>`, iconSize:[22,22], iconAnchor:[11,11] });
+                this._gpsMarker = L.marker([lat, lon], { icon, zIndexOffset:900, interactive:false }).addTo(this.map);
+            }
+            if(this._navFollowEnabled) this.map.panTo([lat, lon], { animate:true, duration:0.8, easeLinearity:0.25 });
+            const kmh = speed != null ? Math.round(speed * 3.6) : null;
+            this._navUpdateUI(lat, lon, kmh);
+            if(this._navAllSteps.length > 0) {
+                const minDist = Math.min(...this._navAllSteps.map(s => this._navDist(lat, lon, s.lat, s.lon)));
+                if(minDist > 60) { this._navOffRouteCount++; if(this._navOffRouteCount >= 3) { this._navOffRouteCount = 0; this._navRecalculate(lat, lon); } }
+                else this._navOffRouteCount = 0;
+            }
+        },
+
+        async _navRecalculate(lat, lon) {
+            const badge = document.getElementById('nav-recalc-badge');
+            badge.style.display = 'block';
+            try {
+                const mode = this.travelMode === 'bicycle' ? 'BICYCLE' : 'WALK';
+                const url = `https://data.mobilites-m.fr/api/routers/default/plan?fromPlace=${lat},${lon}&toPlace=${this.to.lat},${this.to.lon}&numItineraries=1&mode=${mode}&showIntermediateStops=true&bannedAgencies=MCO:MCO`;
+                const res = await fetch(url, { headers: { origin: 'ouestmontram' } });
+                const data = await res.json();
+                const itins = data && data.plan && data.plan.itineraries ? data.plan.itineraries : [];
+                if(itins.length > 0) { this._navCurrentItin = itins[0]; this._navAllSteps = this._extractNavSteps(itins[0]); await this.drawRoute(itins[0]); this._navUpdateUI(lat, lon, null); }
+            } catch(e) {}
+            badge.style.display = 'none';
+        },
+
+        _navUpdateUI(lat, lon, kmh) {
+            document.getElementById('nav-speed-val').textContent = kmh != null ? kmh : '—';
+            if(!this._navAllSteps.length) { document.getElementById('nav-instr-street').textContent = 'En route'; return; }
+            let minDist = Infinity, closestIdx = 0;
+            this._navAllSteps.forEach((s, i) => { const d = this._navDist(lat, lon, s.lat, s.lon); if(d < minDist) { minDist = d; closestIdx = i; } });
+            const nextIdx = Math.min(closestIdx + 1, this._navAllSteps.length - 1);
+            const next = this._navAllSteps[nextIdx];
+            const distToNext = this._navDist(lat, lon, next.lat, next.lon);
+            this._navSetArrow(next.direction === 'DESTINATION' ? 'CONTINUE' : next.direction);
+            document.getElementById('nav-instr-street').textContent = next.direction === 'DESTINATION' ? '🏁 ' + (next.street || 'Arrivée') : (next.street || 'Continuer tout droit');
+            document.getElementById('nav-instr-dist').textContent = fmtDist(distToNext);
+            if(this._navCurrentItin) {
+                const totalDistRemain = this._navRemainingDist(lat, lon);
+                document.getElementById('nav-remain-dist').textContent = fmtDist(totalDistRemain);
+                const totalDist = this._navTotalDist();
+                const fraction = totalDist > 0 ? Math.max(0, Math.min(1, 1 - totalDistRemain / totalDist)) : 0;
+                const remain = this._navCurrentItin.duration * (1 - fraction);
+                const arr = new Date(Date.now() + remain * 1000);
+                document.getElementById('nav-arrive-time').textContent = arr.getHours().toString().padStart(2,'0') + ':' + arr.getMinutes().toString().padStart(2,'0');
+            }
+        },
+
+        _navSetArrow(direction) {
+            const svg = document.getElementById('nav-arrow-svg');
+            if(!svg) return;
+            const W = 28;
+            const ARROWS = {
+                'LEFT':           `<line x1="14" y1="24" x2="14" y2="10"/><line x1="14" y1="10" x2="6" y2="10"/><polyline points="10,6 6,10 10,14"/>`,
+                'SLIGHTLY_LEFT':  `<line x1="14" y1="24" x2="14" y2="14"/><line x1="14" y1="14" x2="8" y2="6"/><polyline points="4,10 8,6 12,8"/>`,
+                'HARD_LEFT':      `<line x1="16" y1="24" x2="16" y2="14"/><line x1="16" y1="14" x2="4" y2="14"/><polyline points="8,10 4,14 8,18"/>`,
+                'RIGHT':          `<line x1="14" y1="24" x2="14" y2="10"/><line x1="14" y1="10" x2="22" y2="10"/><polyline points="18,6 22,10 18,14"/>`,
+                'SLIGHTLY_RIGHT': `<line x1="14" y1="24" x2="14" y2="14"/><line x1="14" y1="14" x2="20" y2="6"/><polyline points="24,10 20,6 16,8"/>`,
+                'HARD_RIGHT':     `<line x1="12" y1="24" x2="12" y2="14"/><line x1="12" y1="14" x2="24" y2="14"/><polyline points="20,10 24,14 20,18"/>`,
+                'UTURN_LEFT':     `<path d="M18 22 L18 10 C18 6 10 6 10 10 L10 14" stroke-linecap="round" fill="none"/><polyline points="6,10 10,14 14,10"/>`,
+                'UTURN_RIGHT':    `<path d="M10 22 L10 10 C10 6 18 6 18 10 L18 14" stroke-linecap="round" fill="none"/><polyline points="22,10 18,14 14,10"/>`,
+                'CONTINUE':       `<line x1="14" y1="24" x2="14" y2="6"/><polyline points="8,12 14,6 20,12"/>`,
+            };
+            svg.innerHTML = ARROWS[direction] || ARROWS['CONTINUE'];
+        },
+
+        _navRemainingDist(lat, lon) {
+            if(!this._navAllSteps.length) return 0;
+            let minDist = Infinity, closestIdx = 0;
+            this._navAllSteps.forEach((s, i) => { const d = this._navDist(lat, lon, s.lat, s.lon); if(d < minDist) { minDist = d; closestIdx = i; } });
+            let total = minDist;
+            for(let i = closestIdx; i < this._navAllSteps.length - 1; i++) total += this._navDist(this._navAllSteps[i].lat, this._navAllSteps[i].lon, this._navAllSteps[i+1].lat, this._navAllSteps[i+1].lon);
+            return total;
+        },
+
+        _navTotalDist() {
+            let total = 0;
+            for(let i = 0; i < this._navAllSteps.length - 1; i++) total += this._navDist(this._navAllSteps[i].lat, this._navAllSteps[i].lon, this._navAllSteps[i+1].lat, this._navAllSteps[i+1].lon);
+            return total;
+        },
+
+        _navDist(lat1, lon1, lat2, lon2) { return L.latLng(lat1, lon1).distanceTo(L.latLng(lat2, lon2)); },
+
+        _extractNavSteps(itin) {
+            const steps = [];
+            for(const leg of itin.legs) {
+                if(!leg.steps || !leg.steps.length) {
+                    if(leg.from && leg.from.lat != null) steps.push({ lat: leg.from.lat, lon: leg.from.lon, direction: 'CONTINUE', street: '' });
+                    continue;
+                }
+                for(const step of leg.steps) {
+                    if(step.lat == null || step.lon == null) continue;
+                    steps.push({ lat: step.lat, lon: step.lon, direction: step.relativeDirection || 'CONTINUE', street: step.streetName || '', distance: step.distance || 0 });
+                }
+            }
+            const lastLeg = itin.legs[itin.legs.length - 1];
+            if(lastLeg && lastLeg.to && lastLeg.to.lat != null) steps.push({ lat: lastLeg.to.lat, lon: lastLeg.to.lon, direction: 'DESTINATION', street: this.to ? this.to.name : 'Destination' });
+            return steps;
+        },
+
+        stopNavigation() {
+            if(!this._navMode) return;
+            this._navMode = false;
+            if(this._navWatchId) { navigator.geolocation.clearWatch(this._navWatchId); this._navWatchId = null; }
+            this._stopOrientation();
+            if(this._navOnMapDrag) { this.map.off('dragstart', this._navOnMapDrag); this._navOnMapDrag = null; }
+            if(this.map.setBearing) this.map.setBearing(0);
+            document.body.classList.remove('nav-active');
+            document.getElementById('nav-overlay').style.display = 'none';
+            document.getElementById('nav-stop-btn').style.display = 'none';
+            document.getElementById('nav-recalc-badge').style.display = 'none';
+            document.getElementById('dv-start-nav-btn').style.display = (this.travelMode === 'walk' || this.travelMode === 'bicycle') ? 'flex' : 'none';
+            if(this.currentBounds) this.fitBounds(this.currentBounds, { maxZoom: 15 });
+            this.startGPS();
+        },
+
+        _startOrientation() {
+            if(!window.DeviceOrientationEvent) return;
+            if(typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission().then(perm => { if(perm === 'granted') this._attachOrientation(); }).catch(() => {});
+            } else {
+                this._attachOrientation();
+            }
+        },
+
+        _attachOrientation() {
+            this._orientationHandler = (e) => {
+                if(!this._navMode) return;
+                let heading = null;
+                if(e.webkitCompassHeading != null) heading = e.webkitCompassHeading;
+                else if(e.alpha != null) heading = 360 - e.alpha;
+                if(heading != null && this.map.setBearing) {
+                    this.map.setBearing(heading);
+                    const btn = document.getElementById('compass-btn');
+                    const svg = document.getElementById('compass-svg');
+                    btn && btn.classList.toggle('visible', Math.abs(heading) > 1);
+                    if(svg) svg.style.transform = `rotate(${heading}deg)`;
+                }
+            };
+            window.addEventListener('deviceorientation', this._orientationHandler, true);
+        },
+
+        _stopOrientation() {
+            if(this._orientationHandler) { window.removeEventListener('deviceorientation', this._orientationHandler, true); this._orientationHandler = null; }
+        },
+        // ── END NAVIGATION MODE ───────────────────────────────────────────────
 
         getHistory(){ try{ return JSON.parse(localStorage.getItem('itin_hist')||'[]'); }catch{ return []; } },
         getFavs()   { try{ return JSON.parse(localStorage.getItem('itin_favs')||'[]'); }catch{ return []; } },
