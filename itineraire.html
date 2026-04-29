@@ -2879,6 +2879,8 @@
         _navAllSteps: [],
         _navWatchId: null,
         _orientationHandler: null,
+        _orientAbsHandler: null,
+        _orientHandler: null,
         _activeDetailIdx: 0,
         _navOffRouteCount: 0,
         _navFollowEnabled: true,
@@ -3056,6 +3058,7 @@
             if(this._navWatchId) { navigator.geolocation.clearWatch(this._navWatchId); this._navWatchId = null; }
             this._stopOrientation();
             if(this._navOnMapDrag) { this.map.off('dragstart', this._navOnMapDrag); this._navOnMapDrag = null; }
+            // Reset bearing smoothly
             if(this.map.setBearing) this.map.setBearing(0);
             document.body.classList.remove('nav-active');
             document.getElementById('nav-overlay').style.display = 'none';
@@ -3063,37 +3066,86 @@
             document.getElementById('nav-recalc-badge').style.display = 'none';
             document.getElementById('dv-start-nav-btn').style.display = (this.travelMode === 'walk' || this.travelMode === 'bicycle') ? 'flex' : 'none';
             if(this.currentBounds) this.fitBounds(this.currentBounds, { maxZoom: 15 });
-            this.startGPS();
+            // Original GPS watch from init() is still running — no need to restart
         },
 
         _startOrientation() {
             if(!window.DeviceOrientationEvent) return;
             if(typeof DeviceOrientationEvent.requestPermission === 'function') {
-                DeviceOrientationEvent.requestPermission().then(perm => { if(perm === 'granted') this._attachOrientation(); }).catch(() => {});
+                // iOS 13+: request permission first
+                DeviceOrientationEvent.requestPermission()
+                    .then(perm => { if(perm === 'granted') this._attachOrientation(); })
+                    .catch(() => {});
             } else {
                 this._attachOrientation();
             }
         },
 
         _attachOrientation() {
-            this._orientationHandler = (e) => {
-                if(!this._navMode) return;
-                let heading = null;
-                if(e.webkitCompassHeading != null) heading = e.webkitCompassHeading;
-                else if(e.alpha != null) heading = 360 - e.alpha;
-                if(heading != null && this.map.setBearing) {
-                    this.map.setBearing(heading);
+            let _smoothHeading = null;
+            let _lastAbsoluteTs = 0;
+            const SMOOTH = 0.18; // low-pass factor (0=frozen, 1=raw)
+
+            const applyHeading = (raw) => {
+                if(raw == null || !this._navMode) return;
+                const h = ((raw % 360) + 360) % 360;
+                if(_smoothHeading == null) {
+                    _smoothHeading = h;
+                } else {
+                    // Shortest-path interpolation to avoid 359→1 flip
+                    let d = h - _smoothHeading;
+                    if(d > 180) d -= 360;
+                    if(d < -180) d += 360;
+                    _smoothHeading = (_smoothHeading + SMOOTH * d + 360) % 360;
+                }
+                if(this.map.setBearing) {
+                    this.map.setBearing(_smoothHeading);
                     const btn = document.getElementById('compass-btn');
                     const svg = document.getElementById('compass-svg');
-                    btn && btn.classList.toggle('visible', Math.abs(heading) > 1);
-                    if(svg) svg.style.transform = `rotate(${heading}deg)`;
+                    btn && btn.classList.toggle('visible', _smoothHeading > 1);
+                    if(svg) svg.style.transform = `rotate(${_smoothHeading}deg)`;
                 }
             };
-            window.addEventListener('deviceorientation', this._orientationHandler, true);
+
+            // ── Absolute event (Chrome Android) ──────────────────────────
+            // Chrome sends alpha CLOCKWISE from geographic north (contrary to spec).
+            // This is the most reliable source on Android — use alpha directly.
+            this._orientAbsHandler = (e) => {
+                if(!this._navMode) return;
+                _lastAbsoluteTs = Date.now();
+                if(e.alpha != null) applyHeading(e.alpha);
+            };
+
+            // ── Regular deviceorientation (iOS + fallback) ────────────────
+            this._orientHandler = (e) => {
+                if(!this._navMode) return;
+                // Skip if absolute event fired recently (avoid double-processing on Android)
+                if(Date.now() - _lastAbsoluteTs < 150) return;
+
+                if(e.webkitCompassHeading != null) {
+                    // iOS Safari: 0=N, 90=E, clockwise — use directly
+                    applyHeading(e.webkitCompassHeading);
+                } else if(e.absolute === true && e.alpha != null) {
+                    // Spec-compliant browser with absolute=true: alpha is CCW → convert
+                    applyHeading((360 - e.alpha) % 360);
+                }
+                // Non-absolute without webkitCompassHeading = unreliable, skip
+            };
+
+            window.addEventListener('deviceorientationabsolute', this._orientAbsHandler, true);
+            window.addEventListener('deviceorientation', this._orientHandler, true);
         },
 
         _stopOrientation() {
-            if(this._orientationHandler) { window.removeEventListener('deviceorientation', this._orientationHandler, true); this._orientationHandler = null; }
+            if(this._orientAbsHandler) {
+                window.removeEventListener('deviceorientationabsolute', this._orientAbsHandler, true);
+                this._orientAbsHandler = null;
+            }
+            if(this._orientHandler) {
+                window.removeEventListener('deviceorientation', this._orientHandler, true);
+                this._orientHandler = null;
+            }
+            this._orientationHandler = null;
         },
         // ── END NAVIGATION MODE ───────────────────────────────────────────────
 
