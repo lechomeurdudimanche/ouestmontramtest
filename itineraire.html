@@ -682,28 +682,6 @@
         }
         #nav-stop-btn:active { opacity: 0.85; }
 
-        #nav-recenter-btn {
-            display: none;
-            position: fixed;
-            /* même position que les boutons de zoom Leaflet (bottomright) */
-            bottom: calc(var(--nav-h) + 30px);
-            right: 10px;
-            z-index: 501;
-            width: 44px; height: 44px;
-            border-radius: 4px;
-            background: #fff;
-            border: 2px solid rgba(0,0,0,0.2);
-            cursor: pointer;
-            align-items: center; justify-content: center;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.25);
-            transition: background 0.15s;
-        }
-        #nav-recenter-btn.visible {
-            display: flex;
-            animation: fadeSlide 0.2s ease;
-        }
-        #nav-recenter-btn:active { background: #f0f0f0; }
-
         #nav-recalc-badge {
             display: none;
             position: fixed;
@@ -734,7 +712,6 @@
 
         body.nav-active #search-float { display: none !important; }
         body.nav-active #bottom-sheet { height: 0 !important; overflow: hidden !important; }
-        body.nav-active .leaflet-control-zoom { display: none !important; }
         .lp-edit-sug-dot {
             width: 8px; height: 8px; border-radius: 50%;
             background: var(--text-muted); flex-shrink: 0;
@@ -992,15 +969,6 @@
     <button id="nav-stop-btn" onclick="ITIN.stopNavigation()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
         Terminer la navigation
-    </button>
-    <button id="nav-recenter-btn" onclick="ITIN.navRecenter()" title="Recentrer sur ma position">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <line x1="12" y1="2" x2="12" y2="6"/>
-            <line x1="12" y1="18" x2="12" y2="22"/>
-            <line x1="2" y1="12" x2="6" y2="12"/>
-            <line x1="18" y1="12" x2="22" y2="12"/>
-        </svg>
     </button>
     <div id="opt-popup">
         <div class="popup-header">
@@ -2922,9 +2890,7 @@
         _navFollowEnabled: true,
         _navOnMapDrag: null,
         _navZoomLocked: false,
-        // GPS smoothing (EMA)
-        _navSmooth: null,          // { lat, lon } smoothed position
-        _navLastApplied: null,     // { lat, lon } last position sent to setView
+        _navRecentreTimer: null,
 
         async startNavigation() {
             if(!this._gpsPos) {
@@ -2942,13 +2908,10 @@
             this._navMode = true;
             this._navOffRouteCount = 0;
             this._navFollowEnabled = true;
-            this._navSmooth = null;
-            this._navLastApplied = null;
 
             document.body.classList.add('nav-active');
             document.getElementById('nav-overlay').style.display = 'flex';
             document.getElementById('nav-stop-btn').style.display = 'flex';
-            document.getElementById('nav-recenter-btn').classList.remove('visible');
             document.getElementById('dv-start-nav-btn').style.display = 'none';
 
             // Bloquer le zoom pendant la navigation
@@ -2956,14 +2919,6 @@
             this.map.scrollWheelZoom.disable();
             this.map.doubleClickZoom.disable();
             this._navZoomLocked = true;
-            // Sécurité : intercepter tout zoomstart résiduel (ex. boutons +/-)
-            this._navOnZoomStart = () => {
-                if(this._navZoomLocked) {
-                    const z = this.map.getZoom();
-                    setTimeout(() => { if(this._navZoomLocked) this.map.setZoom(z, { animate: false }); }, 0);
-                }
-            };
-            this.map.on('zoomstart', this._navOnZoomStart);
 
             this.map.setView([this._gpsPos.lat, this._gpsPos.lon], 17, { animate: true });
 
@@ -2999,78 +2954,39 @@
             );
             this._startOrientation();
             this.map.on('dragstart', this._navOnMapDrag = () => {
-                if(!this._navFollowEnabled) return; // déjà décroché
                 this._navFollowEnabled = false;
-                document.getElementById('nav-recenter-btn').classList.add('visible');
+                clearTimeout(this._navRecentreTimer);
+                // Reprendre le suivi automatiquement après 3 secondes sans interaction
+                this._navRecentreTimer = setTimeout(() => {
+                    if(this._navMode) {
+                        this._navFollowEnabled = true;
+                        if(this._gpsPos) {
+                            this.map.setView([this._gpsPos.lat, this._gpsPos.lon], this.map.getZoom(), { animate: true, duration: 0.5 });
+                        }
+                    }
+                }, 3000);
             });
-        },
-
-        // ── GPS smoothing helpers ────────────────────────────────────────────
-        // Exponential Moving Average on lat/lon + minimum-distance gate.
-        // α = 0.25 → 75 % old, 25 % new  (very smooth at walking speed)
-        _navApplyGPS(rawLat, rawLon, accuracy) {
-            // Reject wildly inaccurate fixes (GPS bouncing off buildings etc.)
-            if(accuracy != null && accuracy > 35) return null;
-
-            if(!this._navSmooth) {
-                this._navSmooth = { lat: rawLat, lon: rawLon };
-            } else {
-                const α = 0.25;
-                this._navSmooth.lat = α * rawLat + (1 - α) * this._navSmooth.lat;
-                this._navSmooth.lon = α * rawLon + (1 - α) * this._navSmooth.lon;
-            }
-            return this._navSmooth;
         },
 
         _navOnPosition(pos) {
             if(!this._navMode) return;
-            const rawLat  = pos.coords.latitude;
-            const rawLon  = pos.coords.longitude;
-            const accuracy = pos.coords.accuracy;
-            const speed   = pos.coords.speed;
-
-            // Apply smoothing / accuracy gate
-            const smooth = this._navApplyGPS(rawLat, rawLon, accuracy);
-            if(!smooth) return; // rejected — too inaccurate
-
-            const lat = smooth.lat;
-            const lon = smooth.lon;
-
-            // Only move the marker if we've moved more than 2 m from last accepted pos
-            const MIN_MOVE = 2; // metres
-            if(this._navLastApplied) {
-                const d = this._navDist(lat, lon, this._navLastApplied.lat, this._navLastApplied.lon);
-                if(d < MIN_MOVE) return; // jitter — ignore
-            }
-            this._navLastApplied = { lat, lon };
+            const lat = pos.coords.latitude, lon = pos.coords.longitude;
+            const speed = pos.coords.speed;
             this._gpsPos = { lat, lon };
-
             if(this._gpsMarker) this._gpsMarker.setLatLng([lat, lon]);
             else {
                 const icon = L.divIcon({ className:'', html:`<div class="gps-dot-wrap"><div class="gps-pulse"></div><div class="gps-dot"></div></div>`, iconSize:[22,22], iconAnchor:[11,11] });
                 this._gpsMarker = L.marker([lat, lon], { icon, zIndexOffset:900, interactive:false }).addTo(this.map);
             }
-
             if(this._navFollowEnabled) {
                 this.map.setView([lat, lon], this.map.getZoom(), { animate: true, duration: 0.6, easeLinearity: 0.25, noMoveStart: true });
             }
-
             const kmh = speed != null ? Math.round(speed * 3.6) : null;
             this._navUpdateUI(lat, lon, kmh);
-
             if(this._navAllSteps.length > 0) {
                 const minDist = Math.min(...this._navAllSteps.map(s => this._navDist(lat, lon, s.lat, s.lon)));
                 if(minDist > 60) { this._navOffRouteCount++; if(this._navOffRouteCount >= 3) { this._navOffRouteCount = 0; this._navRecalculate(lat, lon); } }
                 else this._navOffRouteCount = 0;
-            }
-        },
-
-        // Appelé par le bouton recentrer
-        navRecenter() {
-            this._navFollowEnabled = true;
-            document.getElementById('nav-recenter-btn').classList.remove('visible');
-            if(this._gpsPos && this._navMode) {
-                this.map.setView([this._gpsPos.lat, this._gpsPos.lon], this.map.getZoom(), { animate: true, duration: 0.5 });
             }
         },
 
@@ -3168,21 +3084,17 @@
             if(this._navWatchId) { navigator.geolocation.clearWatch(this._navWatchId); this._navWatchId = null; }
             this._stopOrientation();
             if(this._navOnMapDrag) { this.map.off('dragstart', this._navOnMapDrag); this._navOnMapDrag = null; }
-            if(this._navOnZoomStart) { this.map.off('zoomstart', this._navOnZoomStart); this._navOnZoomStart = null; }
+            clearTimeout(this._navRecentreTimer);
             // Re-enable zoom interactions
             this.map.touchZoom.enable();
             this.map.scrollWheelZoom.enable();
             this.map.doubleClickZoom.enable();
             this._navZoomLocked = false;
-            // Reset smoothing
-            this._navSmooth = null;
-            this._navLastApplied = null;
             // Reset bearing
             if(this.map.setBearing) this.map.setBearing(0);
             document.body.classList.remove('nav-active');
             document.getElementById('nav-overlay').style.display = 'none';
             document.getElementById('nav-stop-btn').style.display = 'none';
-            document.getElementById('nav-recenter-btn').classList.remove('visible');
             document.getElementById('nav-recalc-badge').style.display = 'none';
             document.getElementById('dv-start-nav-btn').style.display = (this.travelMode === 'walk' || this.travelMode === 'bicycle') ? 'flex' : 'none';
             // Le bottom-sheet est visible en mode détail — on le remet à sa hauteur normale
