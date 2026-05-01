@@ -685,22 +685,24 @@
         #nav-recenter-btn {
             display: none;
             position: fixed;
-            bottom: calc(var(--nav-h) + 14px);
-            right: 14px;
+            /* même position que les boutons de zoom Leaflet (bottomright) */
+            bottom: calc(var(--nav-h) + 30px);
+            right: 10px;
             z-index: 501;
-            width: 46px; height: 46px;
-            border-radius: 50%;
+            width: 44px; height: 44px;
+            border-radius: 4px;
             background: #fff;
-            border: none; cursor: pointer;
+            border: 2px solid rgba(0,0,0,0.2);
+            cursor: pointer;
             align-items: center; justify-content: center;
-            box-shadow: 0 3px 14px rgba(0,0,0,0.45);
-            transition: opacity 0.2s, transform 0.2s;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.25);
+            transition: background 0.15s;
         }
         #nav-recenter-btn.visible {
             display: flex;
             animation: fadeSlide 0.2s ease;
         }
-        #nav-recenter-btn:active { opacity: 0.8; transform: scale(0.93); }
+        #nav-recenter-btn:active { background: #f0f0f0; }
 
         #nav-recalc-badge {
             display: none;
@@ -732,6 +734,7 @@
 
         body.nav-active #search-float { display: none !important; }
         body.nav-active #bottom-sheet { height: 0 !important; overflow: hidden !important; }
+        body.nav-active .leaflet-control-zoom { display: none !important; }
         .lp-edit-sug-dot {
             width: 8px; height: 8px; border-radius: 50%;
             background: var(--text-muted); flex-shrink: 0;
@@ -991,13 +994,12 @@
         Terminer la navigation
     </button>
     <button id="nav-recenter-btn" onclick="ITIN.navRecenter()" title="Recentrer sur ma position">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3.5"/>
-            <circle cx="12" cy="12" r="7.5" opacity="0.25"/>
-            <line x1="12" y1="2" x2="12" y2="5.5"/>
-            <line x1="12" y1="18.5" x2="12" y2="22"/>
-            <line x1="2" y1="12" x2="5.5" y2="12"/>
-            <line x1="18.5" y1="12" x2="22" y2="12"/>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <line x1="12" y1="2" x2="12" y2="6"/>
+            <line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="6" y2="12"/>
+            <line x1="18" y1="12" x2="22" y2="12"/>
         </svg>
     </button>
     <div id="opt-popup">
@@ -2920,7 +2922,6 @@
         _navFollowEnabled: true,
         _navOnMapDrag: null,
         _navZoomLocked: false,
-        _navRecentreTimer: null,
         // GPS smoothing (EMA)
         _navSmooth: null,          // { lat, lon } smoothed position
         _navLastApplied: null,     // { lat, lon } last position sent to setView
@@ -3168,7 +3169,6 @@
             this._stopOrientation();
             if(this._navOnMapDrag) { this.map.off('dragstart', this._navOnMapDrag); this._navOnMapDrag = null; }
             if(this._navOnZoomStart) { this.map.off('zoomstart', this._navOnZoomStart); this._navOnZoomStart = null; }
-            clearTimeout(this._navRecentreTimer);
             // Re-enable zoom interactions
             this.map.touchZoom.enable();
             this.map.scrollWheelZoom.enable();
