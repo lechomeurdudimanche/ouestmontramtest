@@ -146,32 +146,47 @@
             opacity: 0.8;
         }
 
-        .plan-viewer {
-            border-radius: 14px;
-            border: 1px solid var(--border);
-            overflow: hidden;
-            background: #2a2a2a;
+        .map-viewer {
             width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 16px 20px 6px;
+        }
+
+        .map-container {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+            width: 100%;
+            height: 260px;
             position: relative;
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
         }
 
-        .plan-frame {
-            width: calc(100% + 80px);
-            height: calc(70vw + 80px);
-            max-height: 560px;
-            min-height: 360px;
-            margin: -40px;
-            border: none;
-            display: block;
+        .map-container:active { cursor: grabbing; }
+
+        .map-container img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform-origin: 0 0;
+            will-change: transform;
+            pointer-events: none;
+            -webkit-user-drag: none;
         }
 
-        .section-label {
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
+        .map-hint {
+            font-size: 0.72rem;
             color: var(--text-muted);
-            padding: 4px 2px;
+            text-align: center;
+            margin-top: 7px;
+            opacity: 0.7;
         }
     </style>
 </head>
@@ -181,16 +196,14 @@
         <div class="header-title">Plans du réseau</div>
     </div>
 
-    <div class="content">
-        <div class="plan-viewer">
-            <iframe
-                class="plan-frame"
-                src="plan_grenoble.pdf#toolbar=0&navpanes=0&scrollbar=0"
-                title="Plan du réseau Grenoble"
-            ></iframe>
+    <div class="map-viewer">
+        <div class="map-container" id="mapContainer">
+            <img src="plan_grenoble.png" id="mapImg" alt="Plan du réseau Grenoble" draggable="false">
         </div>
+        <div class="map-hint">Pincez pour zoomer · Glissez pour naviguer</div>
+    </div>
 
-        <div class="section-label">Télécharger un plan</div>
+    <div class="content">
         <a class="plan-btn"
            href="https://www.reso-m.fr/cms_viewFile.php?idtf=4603&path=PLAN-Mreso-NORD-2024-09.pdf"
            download>
@@ -242,5 +255,115 @@
         </a>
 
     </div>
+    <script>
+        (function () {
+            const container = document.getElementById('mapContainer');
+            const img = document.getElementById('mapImg');
+
+            let scale = 1, minScale = 1, maxScale = 5;
+            let tx = 0, ty = 0;
+            let lastTouchDist = null;
+            let lastMidX = 0, lastMidY = 0;
+            let isDragging = false, startX = 0, startY = 0;
+
+            function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+
+            function apply() {
+                const cw = container.offsetWidth, ch = container.offsetHeight;
+                const iw = cw * scale, ih = ch * scale;
+                tx = clamp(tx, cw - iw, 0);
+                ty = clamp(ty, ch - ih, 0);
+                img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+            }
+
+            function dist(t) {
+                const dx = t[0].clientX - t[1].clientX;
+                const dy = t[0].clientY - t[1].clientY;
+                return Math.hypot(dx, dy);
+            }
+            function mid(t) {
+                return {
+                    x: (t[0].clientX + t[1].clientX) / 2,
+                    y: (t[0].clientY + t[1].clientY) / 2
+                };
+            }
+
+            container.addEventListener('touchstart', e => {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    lastTouchDist = dist(e.touches);
+                    const m = mid(e.touches);
+                    const r = container.getBoundingClientRect();
+                    lastMidX = m.x - r.left;
+                    lastMidY = m.y - r.top;
+                } else if (e.touches.length === 1) {
+                    isDragging = true;
+                    startX = e.touches[0].clientX - tx;
+                    startY = e.touches[0].clientY - ty;
+                }
+            }, { passive: false });
+
+            container.addEventListener('touchmove', e => {
+                e.preventDefault();
+                if (e.touches.length === 2) {
+                    const d = dist(e.touches);
+                    const m = mid(e.touches);
+                    const r = container.getBoundingClientRect();
+                    const mx = m.x - r.left, my = m.y - r.top;
+
+                    const ratio = d / lastTouchDist;
+                    const newScale = clamp(scale * ratio, minScale, maxScale);
+
+                    // Zoom toward pinch midpoint
+                    tx = mx - (mx - tx) * (newScale / scale);
+                    ty = my - (my - ty) * (newScale / scale);
+
+                    // Pan with midpoint movement
+                    tx += mx - lastMidX;
+                    ty += my - lastMidY;
+
+                    scale = newScale;
+                    lastTouchDist = d;
+                    lastMidX = mx;
+                    lastMidY = my;
+                    apply();
+                } else if (e.touches.length === 1 && isDragging) {
+                    tx = e.touches[0].clientX - startX;
+                    ty = e.touches[0].clientY - startY;
+                    apply();
+                }
+            }, { passive: false });
+
+            container.addEventListener('touchend', e => {
+                if (e.touches.length < 2) lastTouchDist = null;
+                if (e.touches.length === 0) isDragging = false;
+            });
+
+            // Mouse support (desktop)
+            container.addEventListener('mousedown', e => {
+                isDragging = true;
+                startX = e.clientX - tx;
+                startY = e.clientY - ty;
+            });
+            window.addEventListener('mousemove', e => {
+                if (!isDragging) return;
+                tx = e.clientX - startX;
+                ty = e.clientY - startY;
+                apply();
+            });
+            window.addEventListener('mouseup', () => isDragging = false);
+            container.addEventListener('wheel', e => {
+                e.preventDefault();
+                const r = container.getBoundingClientRect();
+                const mx = e.clientX - r.left, my = e.clientY - r.top;
+                const delta = e.deltaY > 0 ? 0.85 : 1.18;
+                const newScale = clamp(scale * delta, minScale, maxScale);
+                tx = mx - (mx - tx) * (newScale / scale);
+                ty = my - (my - ty) * (newScale / scale);
+                scale = newScale;
+                apply();
+            }, { passive: false });
+        })();
+    </script>
 </body>
 </html>
