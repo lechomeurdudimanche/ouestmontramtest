@@ -145,6 +145,34 @@
             flex-shrink: 0;
             opacity: 0.8;
         }
+
+        .plan-viewer {
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            background: #2a2a2a;
+            width: 100%;
+            position: relative;
+        }
+
+        .plan-frame {
+            width: calc(100% + 80px);
+            height: calc(70vw + 80px);
+            max-height: 560px;
+            min-height: 360px;
+            margin: -40px;
+            border: none;
+            display: block;
+        }
+
+        .section-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            padding: 4px 2px;
+        }
     </style>
 </head>
 <body>
@@ -154,6 +182,15 @@
     </div>
 
     <div class="content">
+        <div class="plan-viewer">
+            <iframe
+                class="plan-frame"
+                src="plan_grenoble.pdf#toolbar=0&navpanes=0&scrollbar=0"
+                title="Plan du réseau Grenoble"
+            ></iframe>
+        </div>
+
+        <div class="section-label">Télécharger un plan</div>
         <a class="plan-btn"
            href="https://www.reso-m.fr/cms_viewFile.php?idtf=4603&path=PLAN-Mreso-NORD-2024-09.pdf"
            download>
