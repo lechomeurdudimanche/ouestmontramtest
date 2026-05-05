@@ -3534,7 +3534,7 @@ const BUS_RADAR_STOPS = {
                 document.body.classList.remove('view-times');
                 const stopsList = document.getElementById('stops-list');
                 if (stopsList) stopsList.scrollTop = 0;
-                document.getElementById('times-content').innerHTML = '<div class="empty">Sélectionnez un arrêt</div>';
+                document.getElementById('times-content').innerHTML = '<div class="empty">Chargement...</div>';
 
                 if (this.refreshInterval) {
                     clearInterval(this.refreshInterval);
