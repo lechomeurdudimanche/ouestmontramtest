@@ -72,9 +72,13 @@ ouestmontram/
 ├── suivi.html        # Suivi d'un voyage
 ├── itineraire.html   # Calcul d'itinéraire
 ├── infotrafic.html   # Perturbations réseau
+├── contact.html      # Page de contact
+├── plans.html        # Plans du réseau
+├── faq.html          # Foire aux questions
 ├── mentions.html     # Mentions légales
 ├── manifest.json     # Manifeste PWA
 ├── sw.js             # Service Worker
+├── plan_grenoble.png # Plan
 └── logo.png          # Icône de l'application
 ```
 
