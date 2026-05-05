@@ -610,7 +610,7 @@
     <style>
         #bottom-nav {
             position: fixed; bottom: 0; left: 0; right: 0;
-            height: var(--nav-h); background: var(--bg-panel);
+            height: 60px; background: var(--bg-panel);
             border-top: 1px solid var(--border); z-index: 1000; display: flex;
         }
         .nav-link {
@@ -2133,7 +2133,10 @@
             const src = this.travelMode==='walk' ? this.walkItins : this.rawItins;
             const arr = [...src];
             if(this.sortMode==='lessWalk') arr.sort((a,b)=>a.walkDistance-b.walkDistance);
-            else if(this.sortMode==='earliest') arr.sort((a,b)=>a.endTime-b.endTime);
+            else if(this.sortMode==='earliest') {
+                if(this.timeMode==='arrive') arr.sort((a,b)=>b.endTime-a.endTime);
+                else arr.sort((a,b)=>a.endTime-b.endTime);
+            }
             else arr.sort((a,b)=>a.duration-b.duration);
             this.sortedItins = arr;
         },

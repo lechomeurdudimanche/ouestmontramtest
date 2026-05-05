@@ -36,6 +36,7 @@
                 });
 
                 if (response.ok) {
+                    document.getElementById("send-status").style.display = "block";
                     messageInput.value = "";
                     status.innerText = "Message envoyé avec succès !";
                     status.style.color = "#4CAF50";
@@ -48,7 +49,7 @@
             } finally {
                 btn.disabled = false;
                 btn.innerText = "Envoyer le message";
-                setTimeout(() => { status.innerText = ""; }, 3000);
+                setTimeout(() => { status.innerText = ""; document.getElementById("send-status").style.display = "none"; }, 3000);
             }
         }
     </script>
@@ -237,20 +238,11 @@
         .send-btn:disabled { background: var(--border); color: var(--text-muted); }
 
         #send-status {
+            display: none;
             font-size: 0.8rem;
             margin-top: 8px;
             text-align: center;
             height: 1rem;
-        }
-
-        .warning-box {
-            font-size: 0.75rem !important;
-            background: rgba(255, 165, 0, 0.1);
-            color: #ffa500 !important;
-            padding: 8px;
-            border-radius: 6px;
-            margin-top: 10px;
-            border: 1px solid rgba(255, 165, 0, 0.2);
         }
     </style>
 </head>
@@ -263,7 +255,7 @@
     <div class="content">
         <div class="card">
             <div class="card-title">Me contacter</div>
-            <p>Pour toute question, remarque ou signalement, vous pouvez me contacter par e-mail. Je réponds à tous les mails dans les plus brefs délais.</p>
+            <p>Pour toute question, remarque ou signalement, vous pouvez me contacter par e-mail.</p>
             <a href="mailto:contact.ouestmontram@gmail.com" class="mail-btn">
                 <div class="mail-label">
                     <span>Adresse e-mail</span>
@@ -279,7 +271,6 @@
             <textarea id="webhook-message" rows="3" placeholder="Votre message..."></textarea>
             <button id="send-btn" class="send-btn" onclick="sendWebhookMessage()">Envoyer le message</button>
             <div id="send-status"></div>
-            <p class="warning-box">⚠️ Ce canal est à <strong>sens unique</strong>. Sans adresse e-mail dans votre message, je ne pourrai pas vous répondre.</p>
         </div>
 
         <div class="card">

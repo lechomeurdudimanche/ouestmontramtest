@@ -314,11 +314,9 @@
                     const ratio = d / lastTouchDist;
                     const newScale = clamp(scale * ratio, minScale, maxScale);
 
-                    // Zoom toward pinch midpoint
                     tx = mx - (mx - tx) * (newScale / scale);
                     ty = my - (my - ty) * (newScale / scale);
 
-                    // Pan with midpoint movement
                     tx += mx - lastMidX;
                     ty += my - lastMidY;
 
@@ -339,7 +337,6 @@
                 if (e.touches.length === 0) isDragging = false;
             });
 
-            // Mouse support (desktop)
             container.addEventListener('mousedown', e => {
                 isDragging = true;
                 startX = e.clientX - tx;

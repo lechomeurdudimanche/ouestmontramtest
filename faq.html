@@ -31,7 +31,7 @@
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'DM Sans', sans-serif;
             -webkit-tap-highlight-color: transparent;
             tap-highlight-color: transparent;
         }
@@ -197,6 +197,7 @@
             top: -1px;
         }
         .dot-green { background: #4caf50; box-shadow: 0 0 6px #4caf50; }
+        .dot-yellow { background: #f5c518; box-shadow: 0 0 6px #f5c518; }
         .dot-orange { background: #ff9800; }
         .dot-blue { background: var(--radar-color); box-shadow: 0 0 6px var(--radar-color); }
 
@@ -317,6 +318,7 @@
                     <div class="faq-answer">
                         Le point indique la nature de l'horaire affiché :<br><br>
                         <span class="dot dot-green"></span> <strong>Vert</strong> : horaire en temps réel, très fiable.<br>
+                        <span class="dot dot-yellow"></span> <strong>Jaune</strong> : horaire calculé par l'application avec un mélange de données temps réel et théorique. Moyennement fiable.<br>
                         <span class="dot dot-orange"></span> <strong>Orange</strong> : horaire théorique issu de la fiche horaire, sans confirmation temps réel et donc bien moins fiable.<br><br>
                         L'application favorisera toujours les données en temps réel mais si elles ne sont pas disponiblent, elle se reporte sur les données théoriques.
                     </div>
@@ -404,7 +406,7 @@
             <div class="faq-body" role="region">
                 <div class="faq-body-inner">
                     <div class="faq-answer">
-                        Le calcul d'itinéraire est assuré par OpenTripPlanner via l'API Mobilités M. Il propose des itinéraires en <strong>transports en commun</strong> (tram, bus), à <strong>pied</strong> et à <strong>vélo</strong>. Les résultats couvrent l'ensemble du réseau de l'aire grenobloise.
+                        Le calcul d'itinéraire propose des itinéraires en <strong>transports en commun</strong> (tram, bus, train), à <strong>pied</strong> et à <strong>vélo</strong>. Les résultats couvrent l'ensemble du réseau de l'aire grenobloise.
                     </div>
                 </div>
             </div>
@@ -418,7 +420,7 @@
             <div class="faq-body" role="region">
                 <div class="faq-body-inner">
                     <div class="faq-answer">
-                        Oui. Sur la page Itinéraire, juste en dessous du champ de texte pour trouver sa destination, il est possible de définir des lieux favoris.
+                        Oui. Sur la page Itinéraire, juste en dessous du champ de texte pour trouver sa destination, il est possible de définir des lieux favoris comme un domicile ou un lieu de travail. Ces informations sont conservés exclusivment sur votre appareil.
                     </div>
                 </div>
             </div>

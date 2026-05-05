@@ -1492,7 +1492,7 @@
 
             _getPonctPositionHtml(schedule) {
                 if (!schedule || schedule.length === 0)
-                    return `<div class="ponct-trip-pos"><div class="radar-info"><div class="radar-icon"></div> Position inconnue</div></div>`;
+                    return `<div class="ponct-trip-pos"><div class="radar-info">Position inconnue</div></div>`;
                 const serviceDay = schedule[0]?.serviceDay || 0;
                 const now = this._getNowSec(serviceDay);
                 let lastPassed = null, nextStop = null;
@@ -1502,11 +1502,11 @@
                 }
                 if (nextStop) {
                     const displayStop = (lastPassed && (now - lastPassed.realtimeSec) < 10) ? lastPassed : nextStop;
-                    return `<div class="ponct-trip-pos"><div class="radar-info"><div class="radar-icon"></div> Vers <b>${displayStop.stopName}</b></div></div>`;
+                    return `<div class="ponct-trip-pos"><div class="radar-info">Tram vers <b>${displayStop.stopName}</b></div></div>`;
                 }
                 if (lastPassed)
-                    return `<div class="ponct-trip-pos"><div class="radar-info at-stop"><div class="radar-static"></div> Au terminus</div></div>`;
-                return `<div class="ponct-trip-pos"><div class="radar-info"><div class="radar-icon"></div> Position inconnue</div></div>`;
+                    return `<div class="ponct-trip-pos"><div class="radar-info">Tram vers <b>${lastPassed.stopName}</b></div></div>`;
+                return `<div class="ponct-trip-pos"><div class="radar-info">Position inconnue</div></div>`;
             },
 
             _ponctStats(trips) {
@@ -1539,7 +1539,7 @@
                 const sec = abs % 60;
                 const sign = s < 0 ? '-' : '+';
                 const str  = m > 0
-                    ? `${sign}${m} min${sec > 0 ? ' ' + sec : ''}`
+                    ? `${sign}${m} min${sec > 0 ? ' ' + String(sec).padStart(2, '0') : ''}`
                     : `${sign}${sec}s`;
                 return `<span class="${this._delayCls(s)}">${str}</span>`;
             },
