@@ -376,6 +376,11 @@
             gap: 10px;
         }
 
+        .empty-state-icon {
+            font-size: 2.5rem;
+            opacity: 0.6;
+        }
+
         .empty-state-title {
             font-family: 'Syne', sans-serif;
             font-weight: 700;
@@ -635,6 +640,53 @@
             border-radius: 50%;
             background: var(--text-muted);
             flex-shrink: 0;
+        }
+
+        .ponct-diagnostic {
+            margin: 12px 14px 8px;
+            padding: 11px 14px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .ponct-diagnostic.diag-ok       { background: rgba(76,175,80,0.07);  border: 1px solid rgba(76,175,80,0.22); }
+        .ponct-diagnostic.diag-slight   { background: rgba(255,193,7,0.07);  border: 1px solid rgba(255,193,7,0.22); }
+        .ponct-diagnostic.diag-moderate { background: rgba(255,152,0,0.07);  border: 1px solid rgba(255,152,0,0.22); }
+        .ponct-diagnostic.diag-critical { background: rgba(244,67,54,0.07);  border: 1px solid rgba(244,67,54,0.22); }
+        .ponct-diagnostic-label {
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .diag-ok       .ponct-diagnostic-label { color: #4caf50; }
+        .diag-slight   .ponct-diagnostic-label { color: #ffc107; }
+        .diag-moderate .ponct-diagnostic-label { color: #ff9800; }
+        .diag-critical .ponct-diagnostic-label { color: #f44336; }
+        .ponct-diagnostic-label::before {
+            content: '';
+            display: inline-block;
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .diag-ok       .ponct-diagnostic-label::before { background: #4caf50; box-shadow: 0 0 5px rgba(76,175,80,0.5); }
+        .diag-slight   .ponct-diagnostic-label::before { background: #ffc107; }
+        .diag-moderate .ponct-diagnostic-label::before { background: #ff9800; }
+        .diag-critical .ponct-diagnostic-label::before { background: #f44336; box-shadow: 0 0 5px rgba(244,67,54,0.5); animation: pulse-dot 1.2s ease-in-out infinite; }
+        .ponct-diagnostic-msg {
+            font-size: 0.83rem;
+            line-height: 1.58;
+            color: var(--text-main);
+        }
+        .ponct-diagnostic-msg + .ponct-diagnostic-msg {
+            padding-top: 4px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            margin-top: 2px;
         }
 
         #line-view {
@@ -1039,6 +1091,227 @@
             </div>`;
         }
 
+        // ─── Analyse de ponctualité ────────────────────────────────────────────
+        function analyzeLine(directions, nowSec) {
+            const dirEntries = Object.entries(directions).filter(([, trips]) => trips.length > 0);
+            const totalTrips = dirEntries.reduce((s, [, trips]) => s + trips.length, 0);
+
+            if (totalTrips === 0) return null;
+
+            // Cas : un seul tram sur toute la ligne
+            if (totalTrips === 1) {
+                const [dirName, trips] = dirEntries[0];
+                const d = trips[0].delay;
+                if (d > -30 && d <= 30)
+                    return { messages: [`1 tram en circulation vers ${dirName} — à l'heure.`], severity: 'ok' };
+                const sign = d > 0 ? '+' : '';
+                const m = Math.floor(Math.abs(d) / 60), s = Math.abs(d) % 60;
+                const str = m > 0 ? `${sign}${m} min${s > 0 ? ' ' + String(s).padStart(2,'0') : ''}` : `${sign}${d}s`;
+                return {
+                    messages: [`1 tram en circulation vers ${dirName} — retard : ${str}.`],
+                    severity: d > 120 ? 'moderate' : 'slight'
+                };
+            }
+
+            const candidates = [];
+
+            for (const [dirName, trips] of dirEntries) {
+
+                // ── Module 1 : construction clusterMap (arrêts futurs uniquement) ──
+                const clusterMap = new Map();
+                for (const trip of trips) {
+                    for (const stop of trip.schedule) {
+                        if (stop.scheduledSec <= nowSec) continue;
+                        if (!clusterMap.has(stop.clusterIdx)) clusterMap.set(stop.clusterIdx, []);
+                        clusterMap.get(stop.clusterIdx).push({
+                            trip,
+                            scheduledSec: stop.scheduledSec,
+                            realtimeSec:  stop.realtimeSec,
+                            stopName:     stop.stopName
+                        });
+                    }
+                }
+                for (const arr of clusterMap.values())
+                    arr.sort((a, b) => a.scheduledSec - b.scheduledSec);
+
+                // ── Module 2 : regroupement (bunching) ──────────────────────────
+                const bunchEvents = []; // { pairKey, level, realtime_hw, scheduled_hw }
+                for (const [, arr] of clusterMap) {
+                    if (arr.length < 2) continue;
+                    for (let i = 0; i < arr.length - 1; i++) {
+                        const sHw = arr[i+1].scheduledSec - arr[i].scheduledSec;
+                        const rHw = arr[i+1].realtimeSec  - arr[i].realtimeSec;
+                        if (sHw <= 0) continue;
+                        const ratio = rHw / sHw;
+                        const pairKey = `${arr[i].trip.tripId}|${arr[i+1].trip.tripId}`;
+                        let level = null;
+                        if (rHw < 60  || ratio < 0.25) level = 'critical';
+                        else if (rHw < 120 || ratio < 0.45) level = 'severe';
+                        else if (ratio < 0.65 && rHw < sHw - 90) level = 'moderate';
+                        if (level) bunchEvents.push({ pairKey, level, rHw, sHw });
+                    }
+                }
+
+                // Valider : paire présente sur ≥ 2 clusters OU niveau critique
+                const pairCount  = new Map();
+                const pairWorst  = new Map(); // pairKey → {level, rHw, sHw}
+                const levelOrder = { moderate: 0, severe: 1, critical: 2 };
+                for (const ev of bunchEvents) {
+                    pairCount.set(ev.pairKey, (pairCount.get(ev.pairKey) || 0) + 1);
+                    const cur = pairWorst.get(ev.pairKey);
+                    if (!cur || levelOrder[ev.level] > levelOrder[cur.level])
+                        pairWorst.set(ev.pairKey, ev);
+                }
+
+                let bestBunch = null;
+                for (const [pk, count] of pairCount) {
+                    const ev = pairWorst.get(pk);
+                    if (count >= 2 || ev.level === 'critical') {
+                        if (!bestBunch || levelOrder[ev.level] > levelOrder[bestBunch.level])
+                            bestBunch = ev;
+                    }
+                }
+
+                if (bestBunch) {
+                    const rtStr = bestBunch.rHw < 60
+                        ? `${bestBunch.rHw}s`
+                        : `${Math.round(bestBunch.rHw / 60)} min`;
+                    const scMin = Math.round(bestBunch.sHw / 60);
+                    let score, message;
+                    if (bestBunch.level === 'critical') {
+                        score = 100;
+                        message = `2 trams vers ${dirName} se suivent à moins d'1 min — creux d'attente probable avant le prochain.`;
+                    } else if (bestBunch.level === 'severe') {
+                        score = 75;
+                        message = `Trams regroupés vers ${dirName} (écart réel : ${rtStr} au lieu de ${scMin} min prévu).`;
+                    } else {
+                        score = 55;
+                        message = `Service irrégulier vers ${dirName} — trams plus proches que prévu (${rtStr} au lieu de ${scMin} min).`;
+                    }
+                    candidates.push({ score, message, dir: dirName, module: 'bunching' });
+                }
+
+                // ── Module 3 : tram en retard excessif / immobile ───────────────
+                // Ignoré si bunching sévère ou critique (cause liée)
+                if (!bestBunch || bestBunch.level === 'moderate') {
+                    const sortedDelays = trips.map(t => t.delay).sort((a, b) => a - b);
+                    const medianDelay  = sortedDelays[Math.floor(sortedDelays.length / 2)];
+
+                    for (const trip of trips) {
+                        const futureStops = trip.schedule.filter(s => s.scheduledSec > nowSec);
+                        if (futureStops.length < 2) continue; // fin de service, comportement normal
+                        const nextStop = futureStops[0];
+                        const overdue  = nowSec - nextStop.scheduledSec;
+                        if (overdue > 360 || (overdue > 240 && trip.delay > Math.max(120, medianDelay * 2))) {
+                            const min = Math.round(overdue / 60);
+                            candidates.push({
+                                score: 80,
+                                message: `Un tram vers ${dirName} accuse un retard important à ${nextStop.stopName} (+${min} min) — pouvant affecter les passages suivants.`,
+                                dir: dirName, module: 'stalled'
+                            });
+                            break;
+                        }
+                    }
+                }
+
+                // ── Module 4 : gradient de dégradation ──────────────────────────
+                if (trips.length >= 3) {
+                    const sorted = [...trips].sort((a, b) => a.positionIdx - b.positionIdx);
+                    const delays = sorted.map(t => t.delay);
+                    const n      = delays.length;
+                    const xMean  = (n - 1) / 2;
+                    const dMean  = delays.reduce((s, d) => s + d, 0) / n;
+                    const num    = delays.reduce((s, d, i) => s + (i - xMean) * (d - dMean), 0);
+                    const den    = delays.reduce((s, _, i) => s + (i - xMean) ** 2, 0);
+                    const slope  = den === 0 ? 0 : num / den; // secondes par rang de tram
+                    const fitted = delays.map((_, i) => dMean + slope * (i - xMean));
+                    const ssTot  = delays.reduce((s, d) => s + (d - dMean) ** 2, 0);
+                    const ssRes  = delays.reduce((s, d, i) => s + (d - fitted[i]) ** 2, 0);
+                    const r2     = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
+                    const maxDel = Math.max(...delays);
+                    const minDel = delays[0];
+
+                    if (slope > 45 && r2 > 0.65 && maxDel > 120) {
+                        const minStr = minDel > 30  ? `+${Math.round(minDel / 60)} min` : `à l'heure`;
+                        const maxStr = `+${Math.round(maxDel / 60)} min`;
+                        candidates.push({
+                            score: 60,
+                            message: `Les retards s'aggravent progressivement vers ${dirName} — de ${minStr} en tête à ${maxStr} en queue.`,
+                            dir: dirName, module: 'gradient'
+                        });
+                    }
+                }
+
+                // ── Module 5 : irrégularité des intervalles (variance) ───────────
+                // Ignoré si bunching déjà détecté (cause commune)
+                if (!bestBunch) {
+                    const hws = [];
+                    for (const arr of clusterMap.values()) {
+                        if (arr.length < 2) continue;
+                        for (let i = 0; i < arr.length - 1; i++) {
+                            const hw = arr[i+1].realtimeSec - arr[i].realtimeSec;
+                            if (hw > 0) hws.push(hw);
+                        }
+                    }
+                    if (hws.length >= 2) {
+                        const hwMean = hws.reduce((s, h) => s + h, 0) / hws.length;
+                        const hwStd  = Math.sqrt(hws.reduce((s, h) => s + (h - hwMean) ** 2, 0) / hws.length);
+                        const cv     = hwMean > 0 ? hwStd / hwMean : 0;
+                        const hwMin  = Math.round(Math.min(...hws) / 60);
+                        const hwMax  = Math.round(Math.max(...hws) / 60);
+                        if (cv > 0.7 && hwStd > 120) {
+                            candidates.push({
+                                score: 50,
+                                message: `Service irrégulier vers ${dirName} — intervalles très variables (entre ${hwMin} et ${hwMax} min).`,
+                                dir: dirName, module: 'variance'
+                            });
+                        } else if (cv > 0.45 && hwStd > 90) {
+                            candidates.push({
+                                score: 25,
+                                message: `Légère irrégularité vers ${dirName} — intervalles de passage variables.`,
+                                dir: dirName, module: 'variance'
+                            });
+                        }
+                    }
+                }
+            } // fin boucle directions
+
+            // ── Arbitre ─────────────────────────────────────────────────────────
+            if (candidates.length === 0)
+                return { messages: ['Service régulier sur cette ligne.'], severity: 'ok' };
+
+            candidates.sort((a, b) => b.score - a.score);
+            const top = candidates[0];
+            const messages = [top.message];
+
+            const severity = top.score >= 80 ? 'critical'
+                           : top.score >= 55 ? 'moderate'
+                           : top.score >= 30 ? 'slight'
+                           : 'ok';
+
+            // Chercher un deuxième message pertinent
+            for (let i = 1; i < candidates.length; i++) {
+                const c = candidates[i];
+                if (c.score < 30) break;
+                // Direction différente → deuxième phrase directement
+                if (c.dir !== top.dir) {
+                    messages.push(c.message);
+                    break;
+                }
+                // Même direction mais module complémentaire (stalled + bunching ou stalled + gradient)
+                if (c.module !== top.module && c.score >= 40 &&
+                    ((top.module === 'bunching' && c.module === 'stalled') ||
+                     (top.module === 'gradient' && c.module === 'stalled') ||
+                     (top.module === 'stalled'  && c.module === 'bunching'))) {
+                    messages.push(c.message);
+                    break;
+                }
+            }
+
+            return { messages, severity };
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         const app = {
             filters: { tram: true, chrono: true, chrono_peri: true, proximo: true },
             allCurrent: [],
@@ -1137,7 +1410,8 @@
                 if (!el) return;
 
                 if (current.length === 0 && future.length === 0) {
-                    el.innerHTML = '<div class="empty-state"><div class="empty-state-title">Trafic normal</div><div class="empty-state-sub">Aucune perturbation pour cette ligne.</div></div>';
+                    el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">checkmark</div><div class="empty-state-title">Trafic normal</div><div class="empty-state-sub">Aucune perturbation pour cette ligne.</div></div>';
+                    el.querySelector('.empty-state-icon').textContent = '\u2705';
                     return;
                 }
 
@@ -1259,6 +1533,7 @@
                     console.error('Erreur:', error);
                     document.getElementById('disruptions-content').innerHTML = `
                         <div class="empty-state">
+                            <div class="empty-state-icon">⚡</div>
                             <div class="empty-state-title">Erreur de chargement</div>
                             <div class="empty-state-sub">Vérifiez votre connexion et réessayez.</div>
                         </div>`;
@@ -1330,6 +1605,7 @@
             showEmpty(title, sub) {
                 document.getElementById('disruptions-content').innerHTML = `
                     <div class="empty-state">
+                        <div class="empty-state-icon">✅</div>
                         <div class="empty-state-title">${title}</div>
                         <div class="empty-state-sub">${sub}</div>
                     </div>`;
@@ -1634,9 +1910,29 @@
                     return;
                 }
 
+                // ── Bandeau de diagnostic ────────────────────────────────────
+                const nowSecForAnalysis = this._getNowSec(
+                    trips[0]?.schedule?.[0]?.serviceDay || 0
+                );
+                const analysis = analyzeLine(data.directions, nowSecForAnalysis);
+                let diagHtml = '';
+                if (analysis) {
+                    const labelMap = {
+                        ok:       'Trafic normal',
+                        slight:   'Légère perturbation',
+                        moderate: 'Perturbation',
+                        critical: 'Perturbation importante'
+                    };
+                    diagHtml = `<div class="ponct-diagnostic diag-${analysis.severity}">
+                        <div class="ponct-diagnostic-label">${labelMap[analysis.severity]}</div>
+                        ${analysis.messages.map(m => `<div class="ponct-diagnostic-msg">${m}</div>`).join('')}
+                    </div>`;
+                }
+                // ─────────────────────────────────────────────────────────────
+
                 const maxDelay = Math.max(60, ...trips.map(t => Math.abs(t.delay)));
 
-                detailEl.innerHTML = Object.entries(data.directions).map(([dir, dtrips], di) => {
+                detailEl.innerHTML = diagHtml + Object.entries(data.directions).map(([dir, dtrips], di) => {
                     const ds = this._ponctStats(dtrips);
                     const tripsHtml = dtrips.map(trip => `
                         <div class="ponct-trip">
