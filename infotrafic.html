@@ -551,6 +551,32 @@
         .ponct-details { display: none; border-top: 1px solid var(--border); }
         .ponct-line-card.expanded .ponct-details { display: block; }
 
+        .ponct-detail-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            margin: 10px 14px 14px;
+            padding: 10px 0;
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s, color 0.15s;
+        }
+        .ponct-detail-btn:active { background: #383838; }
+        .ponct-detail-btn-arrow {
+            font-size: 0.7rem;
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+        .ponct-trips-area { display: none; border-top: 1px solid var(--border); }
+        .ponct-trips-area.trips-visible { display: block; }
+
         .ponct-direction { border-bottom: 1px solid var(--border); }
         .ponct-direction:last-child { border-bottom: none; }
         .ponct-dir-header {
@@ -1246,7 +1272,7 @@
                     const r2     = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
                     const maxDel = Math.max(...delays);
 
-                    if (slope > 45 && r2 > 0.65 && maxDel > 120) {
+                    if (slope > 45 && r2 > 0.65 && maxDel > 120 && delays[0] >= 300) {
                         // Arrêt du tram le plus en retard (dernier de la file)
                         const mostDelayed  = sorted[sorted.length - 1];
                         const futureStops  = mostDelayed.schedule.filter(s => s.scheduledSec > nowSec);
@@ -1323,8 +1349,10 @@
             if (candidates.length === 0) {
                 const allTrips = dirEntries.flatMap(([, t]) => t);
                 const maxDelay = Math.max(...allTrips.map(t => t.delay));
-                if (maxDelay >= 120)
-                    return { messages: [`Fréquences régulières sur cette ligne. Retard maximum constaté : ${fmtDelay(maxDelay)}.`], severity: 'ok' };
+                if (maxDelay >= 120) {
+                    const maxStr = `${Math.round(maxDelay / 60)} min`;
+                    return { messages: [`Fréquences régulières sur cette ligne. Retard maximum constaté : ${maxStr}.`], severity: 'ok' };
+                }
                 return { messages: ['Fréquences régulières sur cette ligne.'], severity: 'ok' };
             }
 
@@ -1969,11 +1997,15 @@
                         ${analysis.messages.map(m => `<div class="ponct-diagnostic-msg">${m}</div>`).join('')}
                     </div>`;
                 }
-                // ─────────────────────────────────────────────────────────────
 
-                const maxDelay = Math.max(60, ...trips.map(t => Math.abs(t.delay)));
+                // ── Bouton "Voir le détail" ──────────────────────────────────
+                const btnHtml = `<div class="ponct-detail-btn" id="ponct-detail-btn-${safe}" onclick="app.togglePonctTrips('${safe}')">
+                    <span>Voir le détail</span>
+                    <span class="ponct-detail-btn-arrow" id="ponct-detail-arrow-${safe}">▼</span>
+                </div>`;
 
-                detailEl.innerHTML = diagHtml + Object.entries(data.directions).map(([dir, dtrips], di) => {
+                // ── Zone détail trams (masquée par défaut) ───────────────────
+                const tripsAreaHtml = Object.entries(data.directions).map(([dir, dtrips], di) => {
                     const ds = this._ponctStats(dtrips);
                     const tripsHtml = dtrips.map(trip => `
                         <div class="ponct-trip">
@@ -1983,7 +2015,6 @@
                             </div>
                             ${this._getPonctPositionHtml(trip.schedule)}
                         </div>`).join('');
-
                     return `<div class="ponct-direction" id="ponct-dir-${safe}-${di}">
                         <div class="ponct-dir-header" onclick="app.togglePonctDir('${safe}',${di})">
                             <span class="ponct-dir-arrow">▶</span>
@@ -1994,7 +2025,20 @@
                         <div class="ponct-trips">${tripsHtml}</div>
                     </div>`;
                 }).join('');
-            }
+
+                detailEl.innerHTML = diagHtml + btnHtml +
+                    `<div class="ponct-trips-area" id="ponct-trips-area-${safe}">${tripsAreaHtml}</div>`;
+            },
+
+            togglePonctTrips(safe) {
+                const area  = document.getElementById(`ponct-trips-area-${safe}`);
+                const arrow = document.getElementById(`ponct-detail-arrow-${safe}`);
+                const btn   = document.getElementById(`ponct-detail-btn-${safe}`);
+                if (!area) return;
+                const open = area.classList.toggle('trips-visible');
+                if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+                if (btn)   btn.querySelector('span:first-child').textContent = open ? 'Masquer le détail' : 'Voir le détail';
+            },
         };
 
         document.addEventListener("DOMContentLoaded", () => {
