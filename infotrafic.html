@@ -1098,17 +1098,21 @@
 
             if (totalTrips === 0) return null;
 
+            // Helper : formate un délai en secondes → "+X min" ou "−X min"
+            function fmtDelay(sec) {
+                const abs = Math.abs(sec), m = Math.floor(abs / 60);
+                const sign = sec >= 0 ? '+' : '−';
+                return m > 0 ? `${sign}${m} min` : `${sign}${abs}s`;
+            }
+
             // Cas : un seul tram sur toute la ligne
             if (totalTrips === 1) {
                 const [dirName, trips] = dirEntries[0];
                 const d = trips[0].delay;
                 if (d > -30 && d <= 30)
-                    return { messages: [`1 tram en circulation vers ${dirName} — à l'heure.`], severity: 'ok' };
-                const sign = d > 0 ? '+' : '';
-                const m = Math.floor(Math.abs(d) / 60), s = Math.abs(d) % 60;
-                const str = m > 0 ? `${sign}${m} min${s > 0 ? ' ' + String(s).padStart(2,'0') : ''}` : `${sign}${d}s`;
+                    return { messages: [`1 tram en circulation en direction de ${dirName}. Il est à l'heure.`], severity: 'ok' };
                 return {
-                    messages: [`1 tram en circulation vers ${dirName} — retard : ${str}.`],
+                    messages: [`1 tram en circulation en direction de ${dirName}. Retard constaté : ${fmtDelay(d)}.`],
                     severity: d > 120 ? 'moderate' : 'slight'
                 };
             }
@@ -1127,16 +1131,19 @@
                             trip,
                             scheduledSec: stop.scheduledSec,
                             realtimeSec:  stop.realtimeSec,
-                            stopName:     stop.stopName
+                            stopName:     stop.stopName,
+                            clusterIdx:   stop.clusterIdx
                         });
                     }
                 }
                 for (const arr of clusterMap.values())
                     arr.sort((a, b) => a.scheduledSec - b.scheduledSec);
 
+                const sortedClusters = [...clusterMap.entries()].sort(([a], [b]) => a - b);
+
                 // ── Module 2 : regroupement (bunching) ──────────────────────────
-                const bunchEvents = []; // { pairKey, level, realtime_hw, scheduled_hw }
-                for (const [, arr] of clusterMap) {
+                const bunchEvents = [];
+                for (const [cidx, arr] of sortedClusters) {
                     if (arr.length < 2) continue;
                     for (let i = 0; i < arr.length - 1; i++) {
                         const sHw = arr[i+1].scheduledSec - arr[i].scheduledSec;
@@ -1148,65 +1155,74 @@
                         if (rHw < 60  || ratio < 0.25) level = 'critical';
                         else if (rHw < 120 || ratio < 0.45) level = 'severe';
                         else if (ratio < 0.65 && rHw < sHw - 90) level = 'moderate';
-                        if (level) bunchEvents.push({ pairKey, level, rHw, sHw });
+                        if (level) bunchEvents.push({ pairKey, level, rHw, sHw, cidx, stopName: arr[i].stopName });
                     }
                 }
 
-                // Valider : paire présente sur ≥ 2 clusters OU niveau critique
-                const pairCount  = new Map();
-                const pairWorst  = new Map(); // pairKey → {level, rHw, sHw}
-                const levelOrder = { moderate: 0, severe: 1, critical: 2 };
+                const levelOrder     = { moderate: 0, severe: 1, critical: 2 };
+                const pairCount      = new Map();
+                const pairWorst      = new Map();
+                const pairFirstCidx  = new Map(); // pairKey → plus petit cidx où elle apparaît
+
                 for (const ev of bunchEvents) {
                     pairCount.set(ev.pairKey, (pairCount.get(ev.pairKey) || 0) + 1);
                     const cur = pairWorst.get(ev.pairKey);
                     if (!cur || levelOrder[ev.level] > levelOrder[cur.level])
                         pairWorst.set(ev.pairKey, ev);
+                    if (!pairFirstCidx.has(ev.pairKey) || ev.cidx < pairFirstCidx.get(ev.pairKey))
+                        pairFirstCidx.set(ev.pairKey, ev.cidx);
                 }
 
-                let bestBunch = null;
+                let bestBunch = null, bestBunchPairKey = null;
                 for (const [pk, count] of pairCount) {
                     const ev = pairWorst.get(pk);
                     if (count >= 2 || ev.level === 'critical') {
-                        if (!bestBunch || levelOrder[ev.level] > levelOrder[bestBunch.level])
-                            bestBunch = ev;
+                        if (!bestBunch || levelOrder[ev.level] > levelOrder[bestBunch.level]) {
+                            bestBunch = ev; bestBunchPairKey = pk;
+                        }
                     }
                 }
 
                 if (bestBunch) {
-                    const rtStr = bestBunch.rHw < 60
-                        ? `${bestBunch.rHw}s`
-                        : `${Math.round(bestBunch.rHw / 60)} min`;
-                    const scMin = Math.round(bestBunch.sHw / 60);
+                    // Arrêt de reprise : dernier cluster normal AVANT le premier cluster du bunching
+                    const firstBunchCidx = pairFirstCidx.get(bestBunchPairKey);
+                    let recoveryStop = null;
+                    for (const [cidx, arr] of sortedClusters) {
+                        if (cidx >= firstBunchCidx) break;
+                        if (arr.length >= 1) recoveryStop = arr[0].stopName;
+                    }
+                    const waitPart = recoveryStop
+                        ? ` Des temps d'attente irréguliers sont attendus entre ${recoveryStop} et ${dirName}.`
+                        : ` Des temps d'attente irréguliers sont attendus avant ${dirName}.`;
+
                     let score, message;
                     if (bestBunch.level === 'critical') {
                         score = 100;
-                        message = `2 trams vers ${dirName} se suivent à moins d'1 min — creux d'attente probable avant le prochain.`;
+                        message = `Deux trams en direction de ${dirName} se suivent à moins d'une minute.${waitPart}`;
                     } else if (bestBunch.level === 'severe') {
                         score = 75;
-                        message = `Trams regroupés vers ${dirName} (écart réel : ${rtStr} au lieu de ${scMin} min prévu).`;
+                        message = `Des trams sont regroupés en direction de ${dirName}.${waitPart}`;
                     } else {
                         score = 55;
-                        message = `Service irrégulier vers ${dirName} — trams plus proches que prévu (${rtStr} au lieu de ${scMin} min).`;
+                        message = `Fréquences irrégulières en direction de ${dirName}.${waitPart}`;
                     }
                     candidates.push({ score, message, dir: dirName, module: 'bunching' });
                 }
 
                 // ── Module 3 : tram en retard excessif / immobile ───────────────
-                // Ignoré si bunching sévère ou critique (cause liée)
                 if (!bestBunch || bestBunch.level === 'moderate') {
                     const sortedDelays = trips.map(t => t.delay).sort((a, b) => a - b);
                     const medianDelay  = sortedDelays[Math.floor(sortedDelays.length / 2)];
 
                     for (const trip of trips) {
                         const futureStops = trip.schedule.filter(s => s.scheduledSec > nowSec);
-                        if (futureStops.length < 2) continue; // fin de service, comportement normal
+                        if (futureStops.length < 2) continue;
                         const nextStop = futureStops[0];
                         const overdue  = nowSec - nextStop.scheduledSec;
                         if (overdue > 360 || (overdue > 240 && trip.delay > Math.max(120, medianDelay * 2))) {
-                            const min = Math.round(overdue / 60);
                             candidates.push({
                                 score: 80,
-                                message: `Un tram vers ${dirName} accuse un retard important à ${nextStop.stopName} (+${min} min) — pouvant affecter les passages suivants.`,
+                                message: `Un tram en direction de ${dirName} est fortement en retard à ${nextStop.stopName} (${fmtDelay(trip.delay)}). Les passages suivants pourraient être affectés.`,
                                 dir: dirName, module: 'stalled'
                             });
                             break;
@@ -1223,62 +1239,94 @@
                     const dMean  = delays.reduce((s, d) => s + d, 0) / n;
                     const num    = delays.reduce((s, d, i) => s + (i - xMean) * (d - dMean), 0);
                     const den    = delays.reduce((s, _, i) => s + (i - xMean) ** 2, 0);
-                    const slope  = den === 0 ? 0 : num / den; // secondes par rang de tram
+                    const slope  = den === 0 ? 0 : num / den;
                     const fitted = delays.map((_, i) => dMean + slope * (i - xMean));
                     const ssTot  = delays.reduce((s, d) => s + (d - dMean) ** 2, 0);
                     const ssRes  = delays.reduce((s, d, i) => s + (d - fitted[i]) ** 2, 0);
                     const r2     = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
                     const maxDel = Math.max(...delays);
-                    const minDel = delays[0];
 
                     if (slope > 45 && r2 > 0.65 && maxDel > 120) {
-                        const minStr = minDel > 30  ? `+${Math.round(minDel / 60)} min` : `à l'heure`;
-                        const maxStr = `+${Math.round(maxDel / 60)} min`;
+                        // Arrêt du tram le plus en retard (dernier de la file)
+                        const mostDelayed  = sorted[sorted.length - 1];
+                        const futureStops  = mostDelayed.schedule.filter(s => s.scheduledSec > nowSec);
+                        const stopRef      = futureStops.length > 0 ? futureStops[0].stopName : null;
+                        const stopPart     = stopRef
+                            ? ` Le tram le plus en retard se trouve vers ${stopRef} (${fmtDelay(mostDelayed.delay)}).`
+                            : ` Le retard maximum constaté est de ${fmtDelay(mostDelayed.delay)}.`;
                         candidates.push({
                             score: 60,
-                            message: `Les retards s'aggravent progressivement vers ${dirName} — de ${minStr} en tête à ${maxStr} en queue.`,
+                            message: `Les retards progressent en direction de ${dirName}.${stopPart}`,
                             dir: dirName, module: 'gradient'
                         });
                     }
                 }
 
                 // ── Module 5 : irrégularité des intervalles (variance) ───────────
-                // Ignoré si bunching déjà détecté (cause commune)
                 if (!bestBunch) {
-                    const hws = [];
-                    for (const arr of clusterMap.values()) {
+                    // Calcul des headways par cluster, avec ratio réel/prévu
+                    const clusterHws = [];
+                    for (const [cidx, arr] of sortedClusters) {
                         if (arr.length < 2) continue;
                         for (let i = 0; i < arr.length - 1; i++) {
-                            const hw = arr[i+1].realtimeSec - arr[i].realtimeSec;
-                            if (hw > 0) hws.push(hw);
+                            const sHw = arr[i+1].scheduledSec - arr[i].scheduledSec;
+                            const rHw = arr[i+1].realtimeSec  - arr[i].realtimeSec;
+                            if (sHw <= 0 || rHw <= 0) continue;
+                            clusterHws.push({ cidx, stopName: arr[i].stopName, rHw, sHw, ratio: rHw / sHw });
                         }
                     }
-                    if (hws.length >= 2) {
-                        const hwMean = hws.reduce((s, h) => s + h, 0) / hws.length;
-                        const hwStd  = Math.sqrt(hws.reduce((s, h) => s + (h - hwMean) ** 2, 0) / hws.length);
+
+                    if (clusterHws.length >= 2) {
+                        const hwVals = clusterHws.map(h => h.rHw);
+                        const hwMean = hwVals.reduce((s, h) => s + h, 0) / hwVals.length;
+                        const hwStd  = Math.sqrt(hwVals.reduce((s, h) => s + (h - hwMean) ** 2, 0) / hwVals.length);
                         const cv     = hwMean > 0 ? hwStd / hwMean : 0;
-                        const hwMin  = Math.round(Math.min(...hws) / 60);
-                        const hwMax  = Math.round(Math.max(...hws) / 60);
-                        if (cv > 0.7 && hwStd > 120) {
-                            candidates.push({
-                                score: 50,
-                                message: `Service irrégulier vers ${dirName} — intervalles très variables (entre ${hwMin} et ${hwMax} min).`,
-                                dir: dirName, module: 'variance'
-                            });
-                        } else if (cv > 0.45 && hwStd > 90) {
-                            candidates.push({
-                                score: 25,
-                                message: `Légère irrégularité vers ${dirName} — intervalles de passage variables.`,
-                                dir: dirName, module: 'variance'
-                            });
+
+                        if (cv > 0.45 && hwStd > 90) {
+                            // Détection des zones d'irrégularité
+                            // Irrégulier = ratio < 0.60 (trams trop proches) ou > 1.60 (trop espacés)
+                            const IRREG = 0.60;
+                            const zones = [];
+                            let inZone = false, zoneStart = null, prevNormalStop = null;
+
+                            for (const hw of clusterHws) {
+                                const bad = hw.ratio < IRREG || hw.ratio > 1.60;
+                                if (bad && !inZone) {
+                                    inZone    = true;
+                                    zoneStart = prevNormalStop || hw.stopName;
+                                } else if (!bad && inZone) {
+                                    inZone = false;
+                                    zones.push({ start: zoneStart, end: hw.stopName });
+                                    zoneStart = null;
+                                }
+                                if (!bad) prevNormalStop = hw.stopName;
+                            }
+                            if (inZone) zones.push({ start: zoneStart, end: dirName });
+
+                            const strong = cv > 0.7 && hwStd > 120;
+                            let message;
+                            if (zones.length === 0) {
+                                message = `Fréquences irrégulières en direction de ${dirName}.`;
+                            } else if (zones.length === 1) {
+                                message = `Fréquences irrégulières en direction de ${dirName}. Des temps d'attente irréguliers sont attendus entre ${zones[0].start} et ${zones[0].end}.`;
+                            } else {
+                                const zoneStrs = zones.map(z => `entre ${z.start} et ${z.end}`).join(', et ');
+                                message = `Fréquences irrégulières en direction de ${dirName}. Des temps d'attente variables sont attendus ${zoneStrs}.`;
+                            }
+                            candidates.push({ score: strong ? 50 : 25, message, dir: dirName, module: 'variance' });
                         }
                     }
                 }
             } // fin boucle directions
 
             // ── Arbitre ─────────────────────────────────────────────────────────
-            if (candidates.length === 0)
-                return { messages: ['Service régulier sur cette ligne.'], severity: 'ok' };
+            if (candidates.length === 0) {
+                const allTrips = dirEntries.flatMap(([, t]) => t);
+                const maxDelay = Math.max(...allTrips.map(t => t.delay));
+                if (maxDelay >= 120)
+                    return { messages: [`Fréquences régulières sur cette ligne. Retard maximum constaté : ${fmtDelay(maxDelay)}.`], severity: 'ok' };
+                return { messages: ['Fréquences régulières sur cette ligne.'], severity: 'ok' };
+            }
 
             candidates.sort((a, b) => b.score - a.score);
             const top = candidates[0];
@@ -1289,22 +1337,15 @@
                            : top.score >= 30 ? 'slight'
                            : 'ok';
 
-            // Chercher un deuxième message pertinent
             for (let i = 1; i < candidates.length; i++) {
                 const c = candidates[i];
                 if (c.score < 30) break;
-                // Direction différente → deuxième phrase directement
-                if (c.dir !== top.dir) {
-                    messages.push(c.message);
-                    break;
-                }
-                // Même direction mais module complémentaire (stalled + bunching ou stalled + gradient)
+                if (c.dir !== top.dir) { messages.push(c.message); break; }
                 if (c.module !== top.module && c.score >= 40 &&
                     ((top.module === 'bunching' && c.module === 'stalled') ||
                      (top.module === 'gradient' && c.module === 'stalled') ||
                      (top.module === 'stalled'  && c.module === 'bunching'))) {
-                    messages.push(c.message);
-                    break;
+                    messages.push(c.message); break;
                 }
             }
 
